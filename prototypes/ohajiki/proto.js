@@ -140,7 +140,9 @@ export function allAtRest(balls) {
 
 // =============================================================
 // 以下は DOM が存在する環境 (ブラウザ) でのみ実行する。
-// テスト/Node からの import 時は副作用ゼロにする。
+// テストハーネス (proto.test.html をブラウザで開いた場合) から
+// import された際は #stage が無いので initApp は呼ばれず副作用ゼロ。
+// (Node からの import は未対応: 本ファイルはブラウザ専用)
 // =============================================================
 const isBrowser = typeof window !== 'undefined' && typeof document !== 'undefined';
 if (isBrowser && document.getElementById('stage')) {
@@ -236,9 +238,9 @@ function initApp() {
   }
 
   // =============================================================
-  // [入力] スリングショット (マウスのみ)
+  // [入力] スリングショット (Pointer Events: マウス + タッチ + ペン統合)
   // =============================================================
-  function getMousePos(ev) {
+  function getPointerPos(ev) {
     const rect = canvas.getBoundingClientRect();
     return {
       x: (ev.clientX - rect.left) * (canvas.width / rect.width),
@@ -246,30 +248,49 @@ function initApp() {
     };
   }
 
-  canvas.addEventListener('mousedown', (ev) => {
+  // 同時 1 ポインタのみ受け付ける (マルチタッチで狙いが乱れないように)
+  let activePointerId = null;
+
+  canvas.addEventListener('pointerdown', (ev) => {
     if (phase !== 'idle') return;
-    const p = getMousePos(ev);
-    // クリックされたボールを探す
+    if (activePointerId !== null) return;
+    ev.preventDefault(); // iOS Safari のスクロール/ズーム抑止
+    const p = getPointerPos(ev);
+    // クリック/タップされたボールを探す
     for (let i = balls.length - 1; i >= 0; i--) {
       const b = balls[i];
       if (Math.hypot(p.x - b.x, p.y - b.y) <= b.r) {
         aim = { ballId: b.id, startX: p.x, startY: p.y, curX: p.x, curY: p.y };
         phase = 'aiming';
+        activePointerId = ev.pointerId;
+        try { canvas.setPointerCapture(ev.pointerId); } catch (_) { /* noop */ }
         return;
       }
     }
   });
 
-  canvas.addEventListener('mousemove', (ev) => {
+  canvas.addEventListener('pointermove', (ev) => {
     if (phase !== 'aiming' || !aim) return;
-    const p = getMousePos(ev);
+    if (ev.pointerId !== activePointerId) return;
+    ev.preventDefault();
+    const p = getPointerPos(ev);
     aim.curX = p.x;
     aim.curY = p.y;
   });
 
-  canvas.addEventListener('mouseup', (ev) => {
+  function endAim(ev, commit) {
     if (phase !== 'aiming' || !aim) return;
-    const p = getMousePos(ev);
+    if (ev.pointerId !== activePointerId) return;
+    ev.preventDefault();
+    try { canvas.releasePointerCapture(ev.pointerId); } catch (_) { /* noop */ }
+    activePointerId = null;
+    if (!commit) {
+      // pointercancel: ショットを中断
+      phase = 'idle';
+      aim = null;
+      return;
+    }
+    const p = getPointerPos(ev);
     const ball = balls.find(b => b.id === aim.ballId);
     if (ball) {
       ball.vx = (aim.startX - p.x) * SLINGSHOT_K / DT; // 1 frame 内の見かけ速度を秒速へ
@@ -285,7 +306,10 @@ function initApp() {
       phase = 'idle';
     }
     aim = null;
-  });
+  }
+
+  canvas.addEventListener('pointerup', (ev) => endAim(ev, true));
+  canvas.addEventListener('pointercancel', (ev) => endAim(ev, false));
 
   // =============================================================
   // [UI バインド]
