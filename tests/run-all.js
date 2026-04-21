@@ -8,6 +8,7 @@ import './unit/engine.test.js';
 import './unit/gravity.test.js';
 import './unit/determinism.test.js';
 import './unit/pointer.test.js';
+import './unit/keyboard.test.js';
 
 const summaryEl = document.getElementById('summary');
 const resultsEl = document.getElementById('results');
