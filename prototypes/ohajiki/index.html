@@ -1,0 +1,47 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>物理おはじき - パラメータ感度確認プロト (M0.1)</title>
+  <link rel="stylesheet" href="proto.css">
+</head>
+<body>
+  <h1>物理おはじき パラメータ感度確認プロト</h1>
+  <p class="hint">球をマウスでクリック→ドラッグして離すと発射 (全球静止時のみ)</p>
+
+  <div class="layout">
+    <canvas id="stage" width="600" height="600"></canvas>
+
+    <aside class="controls">
+      <div class="slider">
+        <label for="sliderG">G (引力定数): <span id="valG">0.0010</span></label>
+        <input type="range" id="sliderG" min="0" max="0.005" step="0.0001" value="0.001">
+      </div>
+      <div class="slider">
+        <label for="sliderE">e (反発係数): <span id="valE">0.85</span></label>
+        <input type="range" id="sliderE" min="0.5" max="1.0" step="0.01" value="0.85">
+      </div>
+      <div class="slider">
+        <label for="sliderMu">μ (摩擦係数): <span id="valMu">0.30</span></label>
+        <input type="range" id="sliderMu" min="0" max="0.5" step="0.01" value="0.30">
+      </div>
+
+      <div class="buttons">
+        <button id="btnReset" type="button">リセット</button>
+        <button id="btnAdd" type="button">球追加</button>
+      </div>
+
+      <div class="status">
+        <div>球数: <span id="ballCount">0</span></div>
+        <div>状態: <span id="phase">idle</span></div>
+        <div>経過: <span id="elapsed">0</span> ms</div>
+      </div>
+
+      <p class="testlink"><a href="proto.test.html">→ 単体テストを開く</a></p>
+    </aside>
+  </div>
+
+  <script type="module" src="proto.js"></script>
+</body>
+</html>

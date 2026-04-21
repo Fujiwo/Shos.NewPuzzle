@@ -1,0 +1,165 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <title>物理おはじき - 単体テスト (M0.1)</title>
+  <style>
+    body { font-family: system-ui, -apple-system, "Segoe UI", sans-serif; margin: 16px; }
+    h1 { font-size: 1.1rem; }
+    #summary { font-weight: bold; padding: 8px; border-radius: 4px; }
+    #summary.pass { background: #d4f5d4; color: #0a5a0a; }
+    #summary.fail { background: #f5d4d4; color: #5a0a0a; }
+    ul { list-style: none; padding-left: 0; }
+    li { padding: 4px 8px; margin: 2px 0; border-radius: 3px; font-family: ui-monospace, Consolas, monospace; font-size: 0.9rem; }
+    li.pass { background: #eaf7ea; }
+    li.fail { background: #f7eaea; }
+    .meta { color: #666; font-size: 0.8em; }
+  </style>
+</head>
+<body>
+  <h1>物理おはじき 単体テスト</h1>
+  <div id="summary">running…</div>
+  <ul id="results"></ul>
+
+  <script type="module">
+    import {
+      resolveCircleCircle,
+      resolveCircleWall,
+      applyFriction,
+      applyGravity,
+      stepWorld,
+      REST_EPS
+    } from './proto.js';
+
+    const results = [];
+    function test(name, fn) {
+      try {
+        fn();
+        results.push({ name, ok: true });
+      } catch (err) {
+        results.push({ name, ok: false, err: String(err && err.message || err) });
+      }
+    }
+    function approx(actual, expected, tol = 1e-6, label = '') {
+      if (Math.abs(actual - expected) > tol) {
+        throw new Error(`${label} expected ${expected}, got ${actual} (Δ=${actual - expected})`);
+      }
+    }
+    function assert(cond, msg) {
+      if (!cond) throw new Error(msg || 'assertion failed');
+    }
+    const mkBall = (x, y, vx = 0, vy = 0, r = 12, m = 1) => ({ x, y, vx, vy, r, m });
+
+    // ---- Step 2: 円-円弾性衝突 (e=1.0) で正面衝突時の速度交換 ----
+    test('正面衝突 (等質量, e=1.0) で速度交換', () => {
+      const a = mkBall(100, 100, 1, 0);
+      const b = mkBall(123, 100, -1, 0); // dist=23 < r1+r2=24 (重なり)
+      const did = resolveCircleCircle(a, b, 1.0);
+      assert(did === true, '衝突が解決されるべき');
+      approx(a.vx, -1, 1e-9, 'a.vx');
+      approx(b.vx, 1, 1e-9, 'b.vx');
+      approx(a.vy, 0, 1e-9, 'a.vy');
+      approx(b.vy, 0, 1e-9, 'b.vy');
+    });
+
+    test('正面衝突 (等質量, e=0.5) では半分の相対速度に減衰', () => {
+      const a = mkBall(100, 100, 2, 0);
+      const b = mkBall(123, 100, 0, 0);
+      // 等質量・1D・e=0.5: a.vx -> 0.5, b.vx -> 1.5 (運動量 2 保存, 反発係数 0.5)
+      resolveCircleCircle(a, b, 0.5);
+      approx(a.vx, 0.5, 1e-9, 'a.vx');
+      approx(b.vx, 1.5, 1e-9, 'b.vx');
+    });
+
+    test('離れている円同士は衝突解決しない', () => {
+      const a = mkBall(100, 100, 1, 0);
+      const b = mkBall(200, 100, -1, 0);
+      const did = resolveCircleCircle(a, b, 1.0);
+      assert(did === false, '解決されてはいけない');
+      approx(a.vx, 1); approx(b.vx, -1);
+    });
+
+    test('離反方向の相対速度なら解決しない', () => {
+      const a = mkBall(100, 100, -1, 0);
+      const b = mkBall(123, 100, 1, 0);
+      const did = resolveCircleCircle(a, b, 1.0);
+      assert(did === false, '離反中なので解決されてはいけない');
+    });
+
+    // ---- 円-壁反射 ----
+    test('左壁にめり込んだ球は法線方向のみ反転 (e=1.0)', () => {
+      const ball = mkBall(5, 300, -3, 2);
+      const hit = resolveCircleWall(ball, { x: 0, y: 0, w: 600, h: 600 }, 1.0);
+      assert(hit === true);
+      approx(ball.x, 12, 1e-9, 'x が壁から半径分離れる');
+      approx(ball.vx, 3, 1e-9, 'vx 反転');
+      approx(ball.vy, 2, 1e-9, 'vy 不変');
+    });
+
+    test('右壁めり込み + e=0.5 で減衰反射', () => {
+      const ball = mkBall(595, 300, 4, 0);
+      resolveCircleWall(ball, { x: 0, y: 0, w: 600, h: 600 }, 0.5);
+      approx(ball.x, 588, 1e-9);
+      approx(ball.vx, -2, 1e-9, 'vx -> -e * vx');
+    });
+
+    // ---- 摩擦 ----
+    test('|v| < REST_EPS で静止する', () => {
+      const ball = mkBall(0, 0, REST_EPS / 2, 0);
+      applyFriction(ball, 0.3, 1 / 60);
+      approx(ball.vx, 0); approx(ball.vy, 0);
+    });
+
+    test('μ * dt 線形比率で減速する', () => {
+      const ball = mkBall(0, 0, 10, 0);
+      applyFriction(ball, 0.3, 1 / 60);
+      // 比率 (1 - 0.3/60) = 0.995
+      approx(ball.vx, 10 * (1 - 0.3 / 60), 1e-9);
+    });
+
+    // ---- 引力 ----
+    test('G=0 なら速度は変化しない', () => {
+      const balls = [mkBall(100, 100), mkBall(300, 100)];
+      applyGravity(balls, 0, 1 / 60);
+      approx(balls[0].vx, 0); approx(balls[1].vx, 0);
+    });
+
+    test('引力は互いを引き寄せる方向に作用 (運動量保存)', () => {
+      const balls = [mkBall(100, 100), mkBall(300, 100)];
+      applyGravity(balls, 1.0, 1 / 60);
+      assert(balls[0].vx > 0, 'a は右(+)へ');
+      assert(balls[1].vx < 0, 'b は左(-)へ');
+      approx(balls[0].vx + balls[1].vx, 0, 1e-9, '運動量保存 (等質量)');
+    });
+
+    test('近接時は距離下限 d>=2r でクランプし発散しない', () => {
+      const balls = [mkBall(100, 100), mkBall(100.0001, 100)];
+      applyGravity(balls, 1e-3, 1 / 60);
+      assert(Number.isFinite(balls[0].vx), 'NaN/Infinity にならない');
+      assert(Math.abs(balls[0].vx) < 1, '極端に大きな速度にならない');
+    });
+
+    // ---- stepWorld 連携 ----
+    test('stepWorld 1 frame で速度に応じて位置が進む', () => {
+      const balls = [mkBall(100, 100, 60, 0)];
+      const params = { G: 0, e: 1, mu: 0, bounds: { x: 0, y: 0, w: 600, h: 600 } };
+      stepWorld(balls, params, 1 / 60);
+      approx(balls[0].x, 101, 1e-9);
+    });
+
+    // ---- 結果描画 ----
+    const ul = document.getElementById('results');
+    let pass = 0, fail = 0;
+    for (const r of results) {
+      const li = document.createElement('li');
+      li.className = r.ok ? 'pass' : 'fail';
+      li.textContent = (r.ok ? '✓ PASS  ' : '✗ FAIL  ') + r.name + (r.ok ? '' : `  — ${r.err}`);
+      ul.appendChild(li);
+      if (r.ok) pass++; else fail++;
+    }
+    const summary = document.getElementById('summary');
+    summary.className = fail === 0 ? 'pass' : 'fail';
+    summary.textContent = `${pass} passed / ${fail} failed (total ${results.length})`;
+  </script>
+</body>
+</html>
