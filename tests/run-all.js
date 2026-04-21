@@ -4,6 +4,7 @@ import { runAll } from './assert.js';
 import './unit/_smoke.test.js';
 import './unit/rng.test.js';
 import './unit/collision.test.js';
+import './unit/engine.test.js';
 
 const summaryEl = document.getElementById('summary');
 const resultsEl = document.getElementById('results');
