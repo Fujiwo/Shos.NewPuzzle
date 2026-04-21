@@ -1,7 +1,7 @@
 // 円-円弾性衝突 (resolveCircleCircle) のユニットテスト。
 
 import { test, assertClose, assertEqual } from '../assert.js';
-import { resolveCircleCircle } from '../../src/physics/collision.js';
+import { resolveCircleCircle, resolveCircleWall } from '../../src/physics/collision.js';
 
 const TOL = 1e-9;
 
@@ -64,4 +64,59 @@ test('collision: 重なり無し → false', () => {
     const b = { x: 5, y: 0, vx: -1, vy: 0, r: 1, m: 1 };
     const ret = resolveCircleCircle(a, b, 1.0);
     assertEqual(ret, false);
+});
+
+// --- 円-壁反射 (resolveCircleWall) ---
+
+test('wall: 左壁反射 (e=1.0) → 位置補正と vx 反転', () => {
+    const ball = { x: -0.5, y: 50, vx: -2, vy: 0, r: 1, m: 1 };
+    const bounds = { x: 0, y: 0, w: 100, h: 100 };
+    const ret = resolveCircleWall(ball, bounds, 1.0);
+    assertEqual(ret, true, '戻り値');
+    assertClose(ball.x, 1, TOL, 'ball.x (= bounds.x + r)');
+    assertClose(ball.vx, 2, TOL, 'ball.vx 反転');
+    assertClose(ball.vy, 0, TOL, 'ball.vy 不変');
+    assertClose(ball.y, 50, TOL, 'ball.y 不変');
+});
+
+test('wall: 右壁反射 (e=0.5) → 位置補正と vx 反転×減衰', () => {
+    const ball = { x: 100.3, y: 50, vx: 3, vy: 0, r: 1, m: 1 };
+    const bounds = { x: 0, y: 0, w: 100, h: 100 };
+    const ret = resolveCircleWall(ball, bounds, 0.5);
+    assertEqual(ret, true);
+    assertClose(ball.x, 99, TOL, 'ball.x (= bounds.x + w - r)');
+    assertClose(ball.vx, -1.5, TOL, 'ball.vx 反転×0.5');
+    assertClose(ball.vy, 0, TOL);
+});
+
+test('wall: 上壁反射 (e=0.7) → 位置補正と vy 反転×減衰', () => {
+    const ball = { x: 50, y: -0.2, vx: 0, vy: -2, r: 1, m: 1 };
+    const bounds = { x: 0, y: 0, w: 100, h: 100 };
+    const ret = resolveCircleWall(ball, bounds, 0.7);
+    assertEqual(ret, true);
+    assertClose(ball.y, 1, TOL, 'ball.y (= bounds.y + r)');
+    assertClose(ball.vy, 1.4, TOL, 'ball.vy 反転×0.7');
+    assertClose(ball.vx, 0, TOL);
+});
+
+test('wall: 内側にいる場合 → no-op (false / 不変)', () => {
+    const ball = { x: 50, y: 50, vx: 1, vy: 1, r: 1, m: 1 };
+    const bounds = { x: 0, y: 0, w: 100, h: 100 };
+    const ret = resolveCircleWall(ball, bounds, 1.0);
+    assertEqual(ret, false, '戻り値');
+    assertClose(ball.x, 50, TOL);
+    assertClose(ball.y, 50, TOL);
+    assertClose(ball.vx, 1, TOL);
+    assertClose(ball.vy, 1, TOL);
+});
+
+test('wall: 角に同時接触 (左下隅) → x/y 両軸補正＆反転', () => {
+    const ball = { x: 0, y: 100.5, vx: -1, vy: 2, r: 1, m: 1 };
+    const bounds = { x: 0, y: 0, w: 100, h: 100 };
+    const ret = resolveCircleWall(ball, bounds, 1.0);
+    assertEqual(ret, true);
+    assertClose(ball.x, 1, TOL, 'ball.x 補正 (左壁)');
+    assertClose(ball.y, 99, TOL, 'ball.y 補正 (下壁)');
+    assertClose(ball.vx, 1, TOL, 'vx 反転');
+    assertClose(ball.vy, -2, TOL, 'vy 反転');
 });

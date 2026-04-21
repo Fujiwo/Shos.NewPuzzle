@@ -29,3 +29,42 @@ export function resolveCircleCircle(a, b, e) {
     b.x += nx * overlap; b.y += ny * overlap;
     return true;
 }
+
+/**
+ * @typedef {{ x: number, y: number, w: number, h: number }} Rect
+ */
+
+/**
+ * 円-壁反射: bounds の各辺に対し位置・速度を補正 (in-place)。
+ * 法線方向のみ速度反転 × e、ball を bounds 内側へ押し戻す。
+ * @param {Ball} ball
+ * @param {Rect} bounds - 左上原点 / x..x+w, y..y+h が内側
+ * @param {number} e - 反発係数 [0, 1]
+ * @returns {boolean} 補正を行った場合 true
+ */
+export function resolveCircleWall(ball, bounds, e) {
+    const left = bounds.x + ball.r;
+    const right = bounds.x + bounds.w - ball.r;
+    const top = bounds.y + ball.r;
+    const bottom = bounds.y + bounds.h - ball.r;
+    let hit = false;
+    if (ball.x < left) {
+        ball.x = left;
+        if (ball.vx < 0) ball.vx = -ball.vx * e;
+        hit = true;
+    } else if (ball.x > right) {
+        ball.x = right;
+        if (ball.vx > 0) ball.vx = -ball.vx * e;
+        hit = true;
+    }
+    if (ball.y < top) {
+        ball.y = top;
+        if (ball.vy < 0) ball.vy = -ball.vy * e;
+        hit = true;
+    } else if (ball.y > bottom) {
+        ball.y = bottom;
+        if (ball.vy > 0) ball.vy = -ball.vy * e;
+        hit = true;
+    }
+    return hit;
+}
