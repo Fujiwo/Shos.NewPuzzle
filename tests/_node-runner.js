@@ -10,6 +10,7 @@ import './unit/determinism.test.js';
 import './unit/pointer.test.js';
 import './unit/keyboard.test.js';
 import './unit/state.test.js';
+import './unit/rules.test.js';
 
 const results = await runAll();
 let passed = 0, failed = 0;
