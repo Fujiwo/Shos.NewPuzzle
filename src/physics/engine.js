@@ -1,4 +1,7 @@
-// 物理エンジン: 摩擦減衰と静止判定。step / runUntilRest は M1.1.G で追加予定。
+// 物理エンジン: 摩擦減衰・静止判定・シミュレーションループ。
+
+import { resolveCircleCircle, resolveCircleWall } from './collision.js';
+import { applyGravity } from './gravity.js';
 
 /**
  * 速度静止判定の閾値。|v| < REST_EPS で 0 とみなす。
@@ -32,4 +35,62 @@ export function allAtRest(balls) {
         if (Math.hypot(b.vx, b.vy) >= REST_EPS) return false;
     }
     return true;
+}
+
+/**
+ * @typedef {{ x:number, y:number, vx:number, vy:number, r:number, m:number }} Ball
+ * @typedef {{ x:number, y:number, w:number, h:number }} Rect
+ * @typedef {{ balls: Ball[], bounds: Rect, params: { G:number, e:number, mu:number } }} World
+ */
+
+/**
+ * 1 frame シミュレーションを進める (in-place)。
+ * 内部適用順: gravity → 位置更新 (semi-implicit Euler) → 円-円衝突 → 壁衝突 → 摩擦。
+ * 同時 3 球衝突の反復解決は MVP スコープ外 (1 パス、残重なりは次 step で解消)。
+ * @param {World} world
+ * @param {number} dt
+ * @returns {World} 同じ world 参照
+ */
+export function step(world, dt) {
+    const { balls, bounds, params } = world;
+    // 1) 引力で速度を更新
+    applyGravity(balls, params.G, dt);
+    // 2) 位置更新 (更新後の速度を使う = semi-implicit Euler)
+    for (const b of balls) {
+        b.x += b.vx * dt;
+        b.y += b.vy * dt;
+    }
+    // 3) 円-円衝突 (1 パス)
+    for (let i = 0; i < balls.length; i++) {
+        for (let j = i + 1; j < balls.length; j++) {
+            resolveCircleCircle(balls[i], balls[j], params.e);
+        }
+    }
+    // 4) 壁衝突 (押し戻し + 法線速度反転)
+    for (const b of balls) {
+        resolveCircleWall(b, bounds, params.e);
+    }
+    // 5) 摩擦 (REST_EPS 丸めも含む)
+    for (const b of balls) {
+        applyFriction(b, params.mu, dt);
+    }
+    return world;
+}
+
+/**
+ * 全球静止または timeoutMs 超過まで step を反復 (in-place)。
+ * 無限ループ防止のため while 条件で elapsedMs < timeoutMs を先に評価する。
+ * @param {World} world
+ * @param {number} timeoutMs
+ * @param {number} dt - 1 step あたりの秒
+ * @returns {World} 同じ world 参照
+ */
+export function runUntilRest(world, timeoutMs, dt) {
+    const dtMs = dt * 1000;
+    let elapsedMs = 0;
+    while (elapsedMs < timeoutMs && !allAtRest(world.balls)) {
+        step(world, dt);
+        elapsedMs += dtMs;
+    }
+    return world;
 }
