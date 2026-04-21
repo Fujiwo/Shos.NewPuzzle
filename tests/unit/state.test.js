@@ -5,6 +5,9 @@ import { assertEqual, assertClose, assertThrows } from '../assert.js';
 import {
     createInitialState,
     advanceTurn,
+    setThinkDeadline,
+    isThinkTimeout,
+    forceSkipShot,
 } from '../../src/game/state.js';
 
 // ---- Sub-task 1.5.A: createInitialState / advanceTurn ----
@@ -121,4 +124,45 @@ test('state: P1 球を全削除して advanceTurn → status="ended", currentPla
 
 test('state: 未知の mode を渡すと throw', () => {
     assertThrows(() => createInitialState('99ball', 1), 'unknown mode should throw');
+});
+
+// ---- Sub-task 1.5.C: setThinkDeadline / isThinkTimeout / forceSkipShot ----
+
+test('state: setThinkDeadline(now=1000, dur=10000) → thinkDeadlineMs=11000、元不変', () => {
+    const s0 = createInitialState('10ball', 1);
+    const s1 = setThinkDeadline(s0, 1000, 10000);
+    assertEqual(s1.thinkDeadlineMs, 11000, 'thinkDeadlineMs');
+    assertEqual(s0.thinkDeadlineMs, 0, 's0 unchanged');
+});
+
+test('state: isThinkTimeout(deadline=11000, now=10500) → false', () => {
+    const s0 = createInitialState('10ball', 1);
+    const s1 = setThinkDeadline(s0, 1000, 10000);
+    assertEqual(isThinkTimeout(s1, 10500), false, 'before deadline');
+});
+
+test('state: isThinkTimeout(deadline=11000, now=11001) → true', () => {
+    const s0 = createInitialState('10ball', 1);
+    const s1 = setThinkDeadline(s0, 1000, 10000);
+    assertEqual(isThinkTimeout(s1, 11001), true, 'after deadline');
+});
+
+test('state: thinkDeadlineMs=0 (未設定) は常に false', () => {
+    const s0 = createInitialState('10ball', 1);
+    assertEqual(isThinkTimeout(s0, 0), false, 'now=0');
+    assertEqual(isThinkTimeout(s0, 1e12), false, 'now huge');
+});
+
+test('state: forceSkipShot で turn+1 / player 切替 / status=placing / deadline=0、scores 不変', () => {
+    const s0 = createInitialState('10ball', 1);
+    const s1 = setThinkDeadline(s0, 1000, 10000);
+    const s2 = forceSkipShot(s1);
+    assertEqual(s2.turn, 2, 'turn');
+    assertEqual(s2.currentPlayer, 1, 'currentPlayer');
+    assertEqual(s2.status, 'placing', 'status');
+    assertEqual(s2.thinkDeadlineMs, 0, 'thinkDeadlineMs');
+    assertEqual(s2.scores[0], 5, 'scores[0]');
+    assertEqual(s2.scores[1], 5, 'scores[1]');
+    // 元 state 不変
+    assertEqual(s1.thinkDeadlineMs, 11000, 's1 unchanged');
 });

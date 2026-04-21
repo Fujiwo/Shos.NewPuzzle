@@ -172,3 +172,42 @@ export function advanceTurn(state) {
         status: 'placing',
     };
 }
+
+/**
+ * 思考時間デッドライン (絶対時刻 ms) を設定した新しい state を返す (純粋)。
+ * 絶対時刻で持つ理由: performance.now() は経過時間ベースで単調増加なので、
+ * 比較は now > deadline の単純な大小比較で済み、フレーム間の相対計算が不要。
+ * @param {object} state
+ * @param {number} nowMs - 現在時刻 (performance.now() 値)
+ * @param {number} [durationMs=10000] - 思考許容時間 (デフォルト 10 秒)
+ * @returns {object} 新しい state
+ */
+export function setThinkDeadline(state, nowMs, durationMs = 10000) {
+    return {
+        ...state,
+        world: cloneWorld(state.world),
+        scores: [state.scores[0], state.scores[1]],
+        thinkDeadlineMs: nowMs + durationMs,
+    };
+}
+
+/**
+ * 現在時刻が思考デッドラインを越えたかを返す。
+ * thinkDeadlineMs === 0 (未設定) の場合は常に false を返す。
+ * @param {object} state
+ * @param {number} nowMs
+ * @returns {boolean}
+ */
+export function isThinkTimeout(state, nowMs) {
+    return state.thinkDeadlineMs > 0 && nowMs > state.thinkDeadlineMs;
+}
+
+/**
+ * タイムアウト時の強制スキップ: 初速 0 でショット扱い (世界変化なし) のため、
+ * 物理シムを実行する必要がない。状態遷移のみを行う = advanceTurn と同等。
+ * @param {object} state
+ * @returns {object} 新しい state
+ */
+export function forceSkipShot(state) {
+    return advanceTurn(state);
+}
