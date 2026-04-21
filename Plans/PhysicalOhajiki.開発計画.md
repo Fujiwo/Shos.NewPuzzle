@@ -373,7 +373,7 @@ export type ShotInput = { ballIndex: number, vx: number, vy: number };
 
 #### Sub-task 1.1.C: 円-円衝突
 
-- [ ] **Step 1: 失敗テスト記述** — 「等質量正面衝突 → 速度交換」「e=0.5 で運動エネルギー 25% 損失」「直交衝突」3 ケース
+- [ ] **Step 1: 失敗テスト記述** — 「等質量正面衝突 → 速度交換」「e=0.5 で残存運動エネルギー 25% (= 損失 75%)」「直交衝突」3 ケース
 - [ ] **Step 2: テスト実行 → 失敗確認** — `collision.test.js` が FAIL することを確認
 - [ ] **Step 3: 実装** — `src/physics/collision.js` に法線方向の弾性衝突公式で `resolveCircleCircle` を実装:
   ```js
