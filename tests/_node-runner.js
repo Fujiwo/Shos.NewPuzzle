@@ -7,6 +7,7 @@ import './unit/collision.test.js';
 import './unit/engine.test.js';
 import './unit/gravity.test.js';
 import './unit/determinism.test.js';
+import './unit/pointer.test.js';
 
 const results = await runAll();
 let passed = 0, failed = 0;
