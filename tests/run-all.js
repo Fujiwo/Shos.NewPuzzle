@@ -6,6 +6,7 @@ import './unit/rng.test.js';
 import './unit/collision.test.js';
 import './unit/engine.test.js';
 import './unit/gravity.test.js';
+import './unit/determinism.test.js';
 
 const summaryEl = document.getElementById('summary');
 const resultsEl = document.getElementById('results');
