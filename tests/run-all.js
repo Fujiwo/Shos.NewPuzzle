@@ -2,6 +2,7 @@
 
 import { runAll } from './assert.js';
 import './unit/_smoke.test.js';
+import './unit/rng.test.js';
 
 const summaryEl = document.getElementById('summary');
 const resultsEl = document.getElementById('results');
