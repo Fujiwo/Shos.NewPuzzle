@@ -38,10 +38,10 @@ const STONES_PER_END = 8;
 
 /**
  * 描画座標 (px) を world.bounds 基準の世界座標へ逆変換する。
- * @param {number} px
- * @param {number} py
- * @param {{width:number,height:number}} viewport
- * @param {{x:number,y:number,w:number,h:number}} bounds
+ * @param {number} px - 画面 X 座標 (ピクセル)
+ * @param {number} py - 画面 Y 座標 (ピクセル)
+ * @param {{width:number,height:number}} viewport - 描画領域サイズ (ピクセル)
+ * @param {{x:number,y:number,w:number,h:number}} bounds - world.bounds
  * @returns {{x:number,y:number}}
  */
 export function screenToWorldPoint(px, py, viewport, bounds) {
