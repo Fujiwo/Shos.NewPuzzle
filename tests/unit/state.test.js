@@ -166,3 +166,20 @@ test('state: forceSkipShot で turn+1 / player 切替 / status=placing / deadlin
     // 元 state 不変
     assertEqual(s1.thinkDeadlineMs, 11000, 's1 unchanged');
 });
+
+// ---- M1v2.1-B: v2 lane dimensions / no gravity ----------------------------
+
+test('createInitialState (v2 dimensions): bounds 0.5x1.5, params {e,mu} only, no G', () => {
+    const s = createInitialState('10ball', 1);
+    // bounds が v2 縦長レーン
+    assertEqual(s.world.bounds.x, 0, 'bounds.x');
+    assertEqual(s.world.bounds.y, 0, 'bounds.y');
+    assertEqual(s.world.bounds.w, 0.5, 'bounds.w (v2 lane width)');
+    assertEqual(s.world.bounds.h, 1.5, 'bounds.h (v2 lane height)');
+    // params は反発と摩擦のみ (G なし)
+    assertEqual(s.world.params.e, 0.85, 'params.e');
+    assertEqual(s.world.params.mu, 0.3, 'params.mu');
+    assertEqual(s.world.params.G, undefined, 'params.G must be undefined (gravity removed)');
+    // 球半径は 0.020 (v2)
+    assertEqual(s.world.balls[0].r, 0.020, 'ball.r (v2 stone radius)');
+});

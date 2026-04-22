@@ -4,12 +4,12 @@
 
 import { createRng } from '../physics/rng.js';
 
-// ボード境界 1.0 × 1.0 m (M1.2 fixture と一致)
-const BOUNDS = Object.freeze({ x: 0, y: 0, w: 1, h: 1 });
-// 物理パラメータ (M1.2 fixture と一致)
-const PARAMS = Object.freeze({ G: 1e-3, e: 0.85, mu: 0.3 });
-// 球半径 / 質量
-const BALL_RADIUS = 0.025;
+// ボード境界 (v2 カーリング型: 縦長レーン 0.5m x 1.5m)
+const BOUNDS = Object.freeze({ x: 0, y: 0, w: 0.5, h: 1.5 });
+// 物理パラメータ (v2: 反発と摩擦のみ / 引力廃止)
+const PARAMS = Object.freeze({ e: 0.85, mu: 0.3 });
+// ストーン半径 (v2: 0.020 m)
+const BALL_RADIUS = 0.020;
 const BALL_MASS = 1;
 // 配置時のリジェクションサンプリング上限
 const MAX_PLACEMENT_TRIES = 100;

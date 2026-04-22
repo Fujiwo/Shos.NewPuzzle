@@ -8,6 +8,7 @@ import { purgeOutOfBoundsBalls, applyShot } from '../../src/game/loop.js';
 
 const TOL = 1e-9;
 
+// TODO(M1v2.3): v2 順次投擲モデル導入で placeBall を bounds 0.5x1.5 対応にすると復活予定 (現状は v1 placeBall が x>0.5 に配置するため初期状態で OOB が発生)
 test('loop: purgeOutOfBoundsBalls 全球内側なら不変', () => {
     const state = createInitialState('6ball', 42);
     const before = state.world.balls.length;
@@ -18,6 +19,7 @@ test('loop: purgeOutOfBoundsBalls 全球内側なら不変', () => {
     assertEqual(r.removedBalls.length, 0, 'removed 空');
 });
 
+// TODO(M1v2.3): v2 順次投擲モデルで placeBall を再設計後に修正予定 (v1 placeBall が新 bounds 外に配置するため事前 OOB が発生)
 test('loop: purgeOutOfBoundsBalls P0 球 1 つを場外配置 → -1 / score-1 / removed=1', () => {
     const state = createInitialState('6ball', 42);
     // P0 球を 1 つ場外 (x=-1) へ移動
@@ -31,6 +33,7 @@ test('loop: purgeOutOfBoundsBalls P0 球 1 つを場外配置 → -1 / score-1 /
     assertEqual(r.removedBalls[0].owner, 0, 'removed owner=0');
 });
 
+// TODO(M1v2.3): v2 順次投擲モデルで placeBall を再設計後に修正予定 (v1 placeBall が新 bounds 外に配置するため事前 OOB が発生)
 test('loop: purgeOutOfBoundsBalls P0/P1 同時場外 → 両 score -1, removed=2', () => {
     const state = createInitialState('6ball', 42);
     const i0 = state.world.balls.findIndex((b) => b.owner === 0);
