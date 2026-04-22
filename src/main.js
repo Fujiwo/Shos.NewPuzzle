@@ -83,8 +83,9 @@ export function bootstrap(deps) {
     const sfxCtl = createSfxController();
     const sfxAudio = createWebAudioSfx(sfxCtl);
 
-    // 初期 state
-    let state = createInitialState(modeSelect.value === '6ball' ? '6ball' : '10ball', INITIAL_SEED);
+    // 初期 state (v2: object 引数 / mode は '2end'|'1end')。selector の HTML option 値は
+    // 後続タスク (M1v2.7-C / M1v2.8-A) で更新予定。当面は何が来ても 2end をデフォルト。
+    let state = createInitialState({ mode: modeSelect.value === '1end' ? '1end' : '2end', seed: INITIAL_SEED });
 
     // 入力 controller の attach 結果 (detach 用)
     let pointerHandle = null;
@@ -129,8 +130,10 @@ export function bootstrap(deps) {
 
     // ゲーム再初期化
     function restart() {
-        state = createInitialState(modeSelect.value === '6ball' ? '6ball' : '10ball',
-            Math.floor(Math.random() * 1e9));
+        state = createInitialState({
+            mode: modeSelect.value === '1end' ? '1end' : '2end',
+            seed: Math.floor(Math.random() * 1e9),
+        });
         firstShotMarked = false;
         performance.clearMarks('first-shot');
         rebindInput();

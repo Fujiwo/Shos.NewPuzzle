@@ -1,185 +1,88 @@
-// state.js のテスト: ターン制御 / 残数判定 / 試合長モード / 思考時間上限。
+﻿// state.js のテスト (v2 カーリング型 / 順次投擲モデル)。
+// 旧 v1 (球数 / scores / placeBall / turn・currentPlayer) 前提のテストは
+// M1v2.3-A+C で削除。closeEnd ベースで M1v2.3-B で再追加予定。
 
 import { test } from '../assert.js';
-import { assertEqual, assertClose, assertThrows } from '../assert.js';
+import { assertEqual, assertThrows } from '../assert.js';
 import {
     createInitialState,
-    advanceTurn,
     setThinkDeadline,
     isThinkTimeout,
-    forceSkipShot,
 } from '../../src/game/state.js';
 
-// ---- Sub-task 1.5.A: createInitialState / advanceTurn ----
-
-test('state: createInitialState("10ball", 1) → 球数 10、scores=[5,5]', () => {
-    const s = createInitialState('10ball', 1);
-    assertEqual(s.world.balls.length, 10, 'balls.length');
-    assertEqual(s.scores[0], 5, 'scores[0]');
-    assertEqual(s.scores[1], 5, 'scores[1]');
-    assertEqual(s.mode, '10ball', 'mode');
-    assertEqual(s.turn, 1, 'turn');
-    assertEqual(s.currentPlayer, 0, 'currentPlayer');
-    assertEqual(s.status, 'placing', 'status');
-    assertEqual(s.thinkDeadlineMs, 0, 'thinkDeadlineMs');
-});
-
-test('state: createInitialState("6ball", 1) → 球数 6、scores=[3,3]', () => {
-    const s = createInitialState('6ball', 1);
-    assertEqual(s.world.balls.length, 6, 'balls.length');
-    assertEqual(s.scores[0], 3, 'scores[0]');
-    assertEqual(s.scores[1], 3, 'scores[1]');
-});
-
-test('state: 同シードで 2 回呼ぶと balls の (x, y) が一致 (決定論性)', () => {
-    const s1 = createInitialState('10ball', 42);
-    const s2 = createInitialState('10ball', 42);
-    assertEqual(s1.world.balls.length, s2.world.balls.length, 'length');
-    for (let i = 0; i < s1.world.balls.length; i++) {
-        assertClose(s1.world.balls[i].x, s2.world.balls[i].x, 1e-12, `balls[${i}].x`);
-        assertClose(s1.world.balls[i].y, s2.world.balls[i].y, 1e-12, `balls[${i}].y`);
-    }
-});
-
-test('state: P0 球は y < 0.5、P1 球は y >= 0.5 (自陣配置)', () => {
-    const s = createInitialState('10ball', 7);
-    for (const b of s.world.balls) {
-        if (b.owner === 0) {
-            if (!(b.y < 0.5)) throw new Error(`P0 ball at y=${b.y} not in lower half`);
-        } else if (b.owner === 1) {
-            if (!(b.y >= 0.5)) throw new Error(`P1 ball at y=${b.y} not in upper half`);
-        } else {
-            throw new Error(`unknown owner ${b.owner}`);
-        }
-    }
-});
-
-test('state: 球同士の重なりなし (全ペア距離 ≥ 2r)', () => {
-    const s = createInitialState('10ball', 3);
-    const balls = s.world.balls;
-    for (let i = 0; i < balls.length; i++) {
-        for (let j = i + 1; j < balls.length; j++) {
-            const dx = balls[i].x - balls[j].x;
-            const dy = balls[i].y - balls[j].y;
-            const d = Math.hypot(dx, dy);
-            const minD = balls[i].r + balls[j].r;
-            if (d < minD - 1e-9) {
-                throw new Error(`balls ${i},${j} overlap: d=${d} < ${minD}`);
-            }
-        }
-    }
-});
-
-test('state: advanceTurn で turn+1, currentPlayer 切替, status="placing"', () => {
-    const s0 = createInitialState('10ball', 1);
-    const s1 = advanceTurn(s0);
-    assertEqual(s1.turn, 2, 'turn');
-    assertEqual(s1.currentPlayer, 1, 'currentPlayer');
-    assertEqual(s1.status, 'placing', 'status');
-    const s2 = advanceTurn(s1);
-    assertEqual(s2.turn, 3, 'turn');
-    assertEqual(s2.currentPlayer, 0, 'currentPlayer');
-});
-
-test('state: advanceTurn は元 state を破壊しない (純粋)', () => {
-    const s0 = createInitialState('10ball', 1);
-    const origTurn = s0.turn;
-    const origPlayer = s0.currentPlayer;
-    const origX = s0.world.balls[0].x;
-    const origLen = s0.world.balls.length;
-    const s1 = advanceTurn(s0);
-    // 返り値を破壊しても元 state は不変であること
-    s1.world.balls[0].x = 999;
-    s1.turn = 999;
-    assertEqual(s0.turn, origTurn, 's0.turn unchanged');
-    assertEqual(s0.currentPlayer, origPlayer, 's0.currentPlayer unchanged');
-    assertEqual(s0.world.balls[0].x, origX, 's0.world.balls[0].x unchanged');
-    assertEqual(s0.world.balls.length, origLen, 's0.world.balls.length unchanged');
-});
-
-test('state: P0 球を 1 つ pop して advanceTurn → scores=[4,5]', () => {
-    const s0 = createInitialState('10ball', 1);
-    // 元 state を破壊しないよう世界をコピーし、P0 球の最初を取り除く
-    const newBalls = s0.world.balls.slice();
-    const idx = newBalls.findIndex(b => b.owner === 0);
-    newBalls.splice(idx, 1);
-    const removed = { ...s0, world: { ...s0.world, balls: newBalls } };
-    const s1 = advanceTurn(removed);
-    assertEqual(s1.scores[0], 4, 'scores[0]');
-    assertEqual(s1.scores[1], 5, 'scores[1]');
-});
-
-test('state: P1 球を全削除して advanceTurn → status="ended", currentPlayer 保持', () => {
-    const s0 = createInitialState('10ball', 1);
-    const newBalls = s0.world.balls.filter(b => b.owner === 0);
-    const removed = { ...s0, world: { ...s0.world, balls: newBalls } };
-    // s0.currentPlayer は 0 (P0 が直前の手番)
-    const s1 = advanceTurn(removed);
-    assertEqual(s1.status, 'ended', 'status');
-    assertEqual(s1.currentPlayer, 0, 'currentPlayer 保持');
-    assertEqual(s1.turn, removed.turn, 'turn 保持');
-    assertEqual(s1.scores[0], 5, 'scores[0]');
-    assertEqual(s1.scores[1], 0, 'scores[1]');
-});
+// TODO(M1v2.3-B): closeEnd 実装後に v2 仕様 (endIndex / endScores / status 'ended') で再追加予定:
+//   - createInitialState の球数/スコア初期値検証
+//   - placeBall / 自陣配置 / 重なりなし → fgz.js (M1v2.4-A) で再構成
+//   - advanceTurn / forceSkipShot の遷移検証 (closeEnd ベース)
+//   - 残数=0 で status='ended' 判定
 
 test('state: 未知の mode を渡すと throw', () => {
-    assertThrows(() => createInitialState('99ball', 1), 'unknown mode should throw');
+    assertThrows(() => createInitialState({ mode: '99ball', seed: 1 }), 'unknown mode should throw');
 });
 
-// ---- Sub-task 1.5.C: setThinkDeadline / isThinkTimeout / forceSkipShot ----
+// ---- 思考時間制御 (setThinkDeadline / isThinkTimeout) ----
 
 test('state: setThinkDeadline(now=1000, dur=10000) → thinkDeadlineMs=11000、元不変', () => {
-    const s0 = createInitialState('10ball', 1);
+    const s0 = createInitialState({ mode: '2end', seed: 1, thinkDeadlineMs: 0 });
     const s1 = setThinkDeadline(s0, 1000, 10000);
     assertEqual(s1.thinkDeadlineMs, 11000, 'thinkDeadlineMs');
     assertEqual(s0.thinkDeadlineMs, 0, 's0 unchanged');
 });
 
 test('state: isThinkTimeout(deadline=11000, now=10500) → false', () => {
-    const s0 = createInitialState('10ball', 1);
+    const s0 = createInitialState({ mode: '2end', seed: 1, thinkDeadlineMs: 0 });
     const s1 = setThinkDeadline(s0, 1000, 10000);
     assertEqual(isThinkTimeout(s1, 10500), false, 'before deadline');
 });
 
 test('state: isThinkTimeout(deadline=11000, now=11001) → true', () => {
-    const s0 = createInitialState('10ball', 1);
+    const s0 = createInitialState({ mode: '2end', seed: 1, thinkDeadlineMs: 0 });
     const s1 = setThinkDeadline(s0, 1000, 10000);
     assertEqual(isThinkTimeout(s1, 11001), true, 'after deadline');
 });
 
 test('state: thinkDeadlineMs=0 (未設定) は常に false', () => {
-    const s0 = createInitialState('10ball', 1);
+    const s0 = createInitialState({ mode: '2end', seed: 1, thinkDeadlineMs: 0 });
     assertEqual(isThinkTimeout(s0, 0), false, 'now=0');
     assertEqual(isThinkTimeout(s0, 1e12), false, 'now huge');
 });
 
-test('state: forceSkipShot で turn+1 / player 切替 / status=placing / deadline=0、scores 不変', () => {
-    const s0 = createInitialState('10ball', 1);
-    const s1 = setThinkDeadline(s0, 1000, 10000);
-    const s2 = forceSkipShot(s1);
-    assertEqual(s2.turn, 2, 'turn');
-    assertEqual(s2.currentPlayer, 1, 'currentPlayer');
-    assertEqual(s2.status, 'placing', 'status');
-    assertEqual(s2.thinkDeadlineMs, 0, 'thinkDeadlineMs');
-    assertEqual(s2.scores[0], 5, 'scores[0]');
-    assertEqual(s2.scores[1], 5, 'scores[1]');
-    // 元 state 不変
-    assertEqual(s1.thinkDeadlineMs, 11000, 's1 unchanged');
-});
-
-// ---- M1v2.1-B: v2 lane dimensions / no gravity ----------------------------
+// ---- M1v2.1-B: v2 lane dimensions / no gravity (v2 仕様: balls=[] のため ball.r 検証は削除) ----
 
 test('createInitialState (v2 dimensions): bounds 0.5x1.5, params {e,mu} only, no G', () => {
-    const s = createInitialState('10ball', 1);
-    // bounds が v2 縦長レーン
+    const s = createInitialState({ mode: '2end', seed: 1 });
     assertEqual(s.world.bounds.x, 0, 'bounds.x');
     assertEqual(s.world.bounds.y, 0, 'bounds.y');
     assertEqual(s.world.bounds.w, 0.5, 'bounds.w (v2 lane width)');
     assertEqual(s.world.bounds.h, 1.5, 'bounds.h (v2 lane height)');
-    // params は反発と摩擦のみ (G なし)
     assertEqual(s.world.params.e, 0.85, 'params.e');
     assertEqual(s.world.params.mu, 0.3, 'params.mu');
     assertEqual(s.world.params.G, undefined, 'params.G must be undefined (gravity removed)');
-    // 球半径は 0.020 (v2)
-    assertEqual(s.world.balls[0].r, 0.020, 'ball.r (v2 stone radius)');
+});
+
+// ---- M1v2.3-A+C: v2 順次投擲モデル (object 引数 / endIndex / hammerSide) ----
+
+test('state: createInitialState (v2) は空 balls / endIndex=0 / stoneIndex=0 / endScores=[] / extraEndsUsed=0', () => {
+    const s = createInitialState({ mode: '2end', seed: 1 });
+    assertEqual(s.world.balls.length, 0, 'balls 空');
+    assertEqual(s.endIndex, 0, 'endIndex');
+    assertEqual(s.stoneIndex, 0, 'stoneIndex');
+    assertEqual(Array.isArray(s.endScores), true, 'endScores is array');
+    assertEqual(s.endScores.length, 0, 'endScores empty');
+    assertEqual(s.extraEndsUsed, 0, 'extraEndsUsed');
+    assertEqual(s.status, 'in-progress', 'status');
+});
+
+test('state: createInitialState は seed 同一なら hammerSide が決定論的', () => {
+    const a = createInitialState({ mode: '2end', seed: 42 });
+    const b = createInitialState({ mode: '2end', seed: 42 });
+    assertEqual(a.hammerSide, b.hammerSide, 'hammerSide 一致');
+    assertEqual(a.currentSide, 1 - a.hammerSide, 'currentSide = 1 - hammerSide');
+});
+
+test('state: mode 2end は totalStones=16 / mode 1end は totalStones=8', () => {
+    const a = createInitialState({ mode: '2end', seed: 1 });
+    const b = createInitialState({ mode: '1end', seed: 1 });
+    assertEqual(a.totalStones, 16, '2end totalStones');
+    assertEqual(b.totalStones, 8, '1end totalStones');
 });
