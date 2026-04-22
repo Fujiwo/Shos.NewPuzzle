@@ -12,8 +12,14 @@
 // 性能問題が出たら setOwnSideRect 拡張を検討する。
 
 import { createInitialState, advanceTurn } from './game/state.js';
-import { isOutOfBounds, evaluateWinner } from './game/rules.js';
+import { evaluateWinner } from './game/rules.js';
 import { purgeOutOfBoundsBalls, applyShot } from './game/loop.js';
+
+// v2 暫定: 場外判定 (M1v2.4-A で fgz.js に集約予定)
+function isOutOfBoundsLocal(ball, bounds) {
+    return ball.x < bounds.x || ball.x > bounds.x + bounds.w
+        || ball.y < bounds.y || ball.y > bounds.y + bounds.h;
+}
 import { step, allAtRest } from './physics/engine.js';
 import { attachPointerInput } from './input/pointer.js';
 import { attachKeyboardInput } from './input/keyboard.js';
@@ -159,7 +165,7 @@ export function bootstrap(deps) {
                 },
             });
             if (allAtRest(state.world.balls)) {
-                const purged = purgeOutOfBoundsBalls(state, isOutOfBounds);
+                const purged = purgeOutOfBoundsBalls(state, isOutOfBoundsLocal);
                 for (const rb of purged.removedBalls) {
                     effects.spawnScorePopup({ x: rb.x, y: rb.y, text: '+1', startMs: now });
                     sfxCtl.enqueue('pop', now);

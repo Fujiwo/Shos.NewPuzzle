@@ -3,8 +3,14 @@
 
 import { test, assertEqual, assertClose } from '../assert.js';
 import { createInitialState } from '../../src/game/state.js';
-import { isOutOfBounds } from '../../src/game/rules.js';
 import { purgeOutOfBoundsBalls, applyShot } from '../../src/game/loop.js';
+
+// M1v2.2-B: rules.js から isOutOfBounds が削除されたため、ローカルに同等実装を持つ。
+// (M1v2.4-A で fgz.js に集約予定)
+function isOutOfBounds(ball, bounds) {
+    return ball.x < bounds.x || ball.x > bounds.x + bounds.w
+        || ball.y < bounds.y || ball.y > bounds.y + bounds.h;
+}
 
 const TOL = 1e-9;
 

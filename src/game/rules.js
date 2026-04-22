@@ -1,61 +1,54 @@
-// 勝敗・場外判定ルール。state.js には依存しない (片方向: rules→state は型コメントのみ)。
-//
-// 仕様 (Plans §4.1):
-// - isOutOfBounds: 球の中心が bounds 矩形の縁を越えた瞬間に true。半径は考慮しない。
-// - evaluateWinner:
-//     status !== 'ended'              → { winner: null, reason: 'in-progress' }
-//     scores 大小決着                 → { winner: 0|1, reason: 'remaining-count' }
-//     同数 → タイブレーク (中心距離) → { winner: 0|1, reason: 'tiebreak-center-distance' }
-//     完全一致 (極小確率)             → { winner: null, reason: 'draw' }
+// カーリング型の得点ロジック。
+// scoreEnd: エンド終了時の盤面を評価し、得点側と得点を返す。
+// evaluateWinner: 全エンドの得点合計から勝者を決定する。
+
+import { distanceToButton, isInHouse } from './house.js';
 
 /**
- * 球の中心が bounds の縁を越えたかどうかを返す。
- * @param {{x:number, y:number}} ball
- * @param {{x:number, y:number, w:number, h:number}} bounds
- * @returns {boolean}
- */
-export function isOutOfBounds(ball, bounds) {
-    return ball.x < bounds.x
-        || ball.x > bounds.x + bounds.w
-        || ball.y < bounds.y
-        || ball.y > bounds.y + bounds.h;
-}
-
-/**
- * player の生存球の中心 (0.5, 0.5) からの距離合計を計算する。
- * bounds の中心を center として汎用化。
+ * 1 エンド分のスコアを計算する。
+ * 規則:
+ *   1. ハウス内のストーンのみ評価対象
+ *   2. 双方ハウス内 0 個 → 0 点 (side=null)
+ *   3. 双方ハウス内あり → 「相手側の最近接ストーンより内側にある自陣ストーン数」=得点
  * @param {Array<{x:number, y:number, owner:0|1}>} balls
- * @param {0|1} player
- * @param {{x:number, y:number, w:number, h:number}} bounds
- * @returns {number}
+ * @returns {{ side: 0|1|null, points: number }}
  */
-function totalCenterDistance(balls, player, bounds) {
-    const cx = bounds.x + bounds.w / 2;
-    const cy = bounds.y + bounds.h / 2;
-    let sum = 0;
-    for (const b of balls) {
-        if (b.owner !== player) continue;
-        sum += Math.hypot(b.x - cx, b.y - cy);
+export function scoreEnd(balls) {
+    const inHouse = balls.filter(isInHouse);
+    if (inHouse.length === 0) return { side: null, points: 0 };
+
+    const closestByOwner = [Infinity, Infinity];
+    for (const b of inHouse) {
+        const d = distanceToButton(b);
+        if (d < closestByOwner[b.owner]) closestByOwner[b.owner] = d;
     }
-    return sum;
+    if (!isFinite(closestByOwner[0]) && !isFinite(closestByOwner[1])) {
+        return { side: null, points: 0 };
+    }
+    const winnerSide = closestByOwner[0] < closestByOwner[1] ? 0 : 1;
+    const opponentClosest = closestByOwner[1 - winnerSide];
+    let points = 0;
+    for (const b of inHouse) {
+        if (b.owner !== winnerSide) continue;
+        if (distanceToButton(b) < opponentClosest) points++;
+    }
+    return { side: winnerSide, points };
 }
 
 /**
- * 勝者を判定する。
- * @param {object} state - GameState
- * @returns {{winner: 0|1|null, reason: string}}
+ * 試合勝者を判定する。
+ * @param {object} state - { status, endScores: Array<{side,points}>, extraEndsUsed }
+ * @returns {{ winner: 0|1|null, totals: [number, number], reason: string }}
  */
 export function evaluateWinner(state) {
     if (state.status !== 'ended') {
-        return { winner: null, reason: 'in-progress' };
+        return { winner: null, totals: [0, 0], reason: 'in-progress' };
     }
-    const [s0, s1] = state.scores;
-    if (s0 > s1) return { winner: 0, reason: 'remaining-count' };
-    if (s1 > s0) return { winner: 1, reason: 'remaining-count' };
-    // 同数 → タイブレーク (場の中心からの距離合計が小さい側を勝ち)
-    const d0 = totalCenterDistance(state.world.balls, 0, state.world.bounds);
-    const d1 = totalCenterDistance(state.world.balls, 1, state.world.bounds);
-    if (d0 < d1) return { winner: 0, reason: 'tiebreak-center-distance' };
-    if (d1 < d0) return { winner: 1, reason: 'tiebreak-center-distance' };
-    return { winner: null, reason: 'draw' };
+    const totals = [0, 0];
+    for (const es of state.endScores) {
+        if (es.side !== null) totals[es.side] += es.points;
+    }
+    if (totals[0] > totals[1]) return { winner: 0, totals, reason: 'higher-score' };
+    if (totals[1] > totals[0]) return { winner: 1, totals, reason: 'higher-score' };
+    return { winner: null, totals, reason: 'draw' };
 }
