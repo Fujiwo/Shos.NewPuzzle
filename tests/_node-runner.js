@@ -5,7 +5,6 @@ import './unit/_smoke.test.js';
 import './unit/rng.test.js';
 import './unit/collision.test.js';
 import './unit/engine.test.js';
-import './unit/gravity.test.js';
 import './unit/determinism.test.js';
 import './unit/pointer.test.js';
 import './unit/keyboard.test.js';

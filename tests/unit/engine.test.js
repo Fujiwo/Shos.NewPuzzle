@@ -200,3 +200,23 @@ test('engine: step で壁衝突時に onWallHit が呼ばれる', () => {
     assertEqual(hits.length, 1, 'onWallHit 呼出回数');
     assertEqual(hits[0], world.balls[0], '引数は当該ボール参照');
 });
+
+// ---- M1v2.1-A: gravity 廃止 (v2 カーリング型) -------------------------------
+
+test('engine.step does not apply gravity acceleration', () => {
+    // v2: params.G を持たない world でも、静止 2 球が引力で加速されないこと。
+    // (引力モジュール残存時は G=undefined → NaN 速度になり FAIL する)
+    const world = {
+        balls: [
+            { x: 0.20, y: 0.5, vx: 0, vy: 0, r: 0.020, m: 1 },
+            { x: 0.30, y: 0.5, vx: 0, vy: 0, r: 0.020, m: 1 },
+        ],
+        bounds: { x: 0, y: 0, w: 0.5, h: 1.5 },
+        params: { e: 0.85, mu: 0.3 }, // G を含まない
+    };
+    step(world, 1 / 60);
+    assertEqual(world.balls[0].vx, 0, 'a.vx');
+    assertEqual(world.balls[0].vy, 0, 'a.vy');
+    assertEqual(world.balls[1].vx, 0, 'b.vx');
+    assertEqual(world.balls[1].vy, 0, 'b.vy');
+});

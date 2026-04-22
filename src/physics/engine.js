@@ -1,7 +1,6 @@
 // 物理エンジン: 摩擦減衰・静止判定・シミュレーションループ。
 
 import { resolveCircleCircle, resolveCircleWall } from './collision.js';
-import { applyGravity } from './gravity.js';
 
 /**
  * 速度静止判定の閾値。|v| < REST_EPS で 0 とみなす。
@@ -58,8 +57,6 @@ export function step(world, dt, options = {}) {
     const { balls, bounds, params } = world;
     const onCollision = options.onCollision;
     const onWallHit = options.onWallHit;
-    // 1) 引力で速度を更新
-    applyGravity(balls, params.G, dt);
     // 2) 位置更新 (更新後の速度を使う = semi-implicit Euler)
     for (const b of balls) {
         b.x += b.vx * dt;
