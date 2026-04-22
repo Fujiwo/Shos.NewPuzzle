@@ -46,3 +46,41 @@ button:hover {
     white-space: pre-wrap;
     max-width: 600px;
 }
+
+/* K2 (Phase 2v2): 設定パネル
+ * 既存配色 (背景 #1A2E1A / 文字 #F5E663 / 枠 #2D1B0E) と整合。
+ * 設定項目が増えても破綻しないよう column flex で行を積む。
+ */
+.settings-panel {
+    display: inline-block;
+    background: rgba(45, 27, 14, 0.85); /* #2D1B0E 半透明 */
+    border: 1px solid #F5E663;
+    border-radius: 6px;
+    padding: 8px 14px;
+    margin: 4px;
+}
+
+.settings-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    min-height: 32px; /* タッチターゲット (Apple HIG 推奨 ≥ 44pt の 8 割を確保) */
+    cursor: pointer;
+    user-select: none;
+}
+
+.settings-row + .settings-row {
+    margin-top: 4px;
+}
+
+.settings-row input[type="checkbox"] {
+    width: 18px;
+    height: 18px;
+    cursor: pointer;
+    accent-color: #F5E663; /* チェック時の塗り色をテーマ色へ */
+}
+
+.settings-row span {
+    color: #F5E663;
+    font-size: 14px;
+}
