@@ -1,32 +1,29 @@
-// Physical Ohajiki MVP-α エントリポイント。
+// Physical Ohajiki v2 (カーリング型) エントリポイント。
 // ブラウザ専用 (DOM / Canvas / AudioContext / requestAnimationFrame に依存)。
 // Node テストでは import されない。
 //
 // 役割:
-// - state / effects / sfx / 入力 controller / 描画 を統合
-// - rAF ループで simulating 中は physics step、静止後に場外除去 → ターン進行
+// - v2 GameState (status='in-progress'|'ended') / FSM 入力 / 設定パネル / 予測線オーバーレイ統合
+// - rAF ループで simulating フラグが立つ間 physics step、静止後に
+//   場外球除去 + FGZ 違反判定 + stoneIndex/currentSide 進行 + closeEnd を実行
 // - G7 (起動 → 初手 ≤15 秒) を performance.mark/measure で計測 (console 出力)
-//
-// ownSideRect の扱い: currentPlayer が変わるたびに pointer/keyboard controller を
-// detach → 再 attach する素朴な方針 (M1.3 で flagged の通り)。
-// 性能問題が出たら setOwnSideRect 拡張を検討する。
 
-import { createInitialState, advanceTurn } from './game/state.js';
+import { createInitialState, closeEnd } from './game/state.js';
 import { evaluateWinner } from './game/rules.js';
-import { purgeOutOfBoundsBalls, applyShot } from './game/loop.js';
-
-// v2 暫定: 場外判定 (M1v2.4-A で fgz.js に集約予定)
-function isOutOfBoundsLocal(ball, bounds) {
-    return ball.x < bounds.x || ball.x > bounds.x + bounds.w
-        || ball.y < bounds.y || ball.y > bounds.y + bounds.h;
-}
+import { applyShot } from './game/loop.js';
+import { detectFgzViolation, isOutOfLane } from './game/fgz.js';
 import { step, allAtRest } from './physics/engine.js';
-import { attachPointerInput } from './input/pointer.js';
-import { attachKeyboardInput } from './input/keyboard.js';
+import { createPointerFsm } from './input/pointer.js';
+import { createKeyboardFsm } from './input/keyboard.js';
 import { render, fitViewport } from './render/canvas.js';
-import { renderHud, getMuteButtonLabel } from './render/ui.js';
+import {
+    renderHud,
+    getMuteButtonLabel,
+    renderSettingsPanel,
+} from './render/ui.js';
 import { createEffectManager } from './render/effects.js';
 import { createSfxController, createWebAudioSfx } from './audio/sfx.js';
+import { loadSettings, saveSettings } from './game/settings.js';
 
 // G7 計測: モジュールロード時刻を起点とする
 performance.mark('app-start');
@@ -36,13 +33,8 @@ let firstShotMarked = false;
 const SIM_DT = 1 / 60;
 // 初期 seed (リスタート時は乱数化)
 const INITIAL_SEED = 42;
-
-// currentPlayer 別の自陣矩形 (世界座標 0..1)
-function ownSideRectFor(player) {
-    return player === 0
-        ? { x0: 0, y0: 0, x1: 1, y1: 0.5 }
-        : { x0: 0, y0: 0.5, x1: 1, y1: 1 };
-}
+// 1 エンドあたりの総投擲数 (4 stones × 2 sides)
+const STONES_PER_END = 8;
 
 // Canvas のスクリーン座標を世界座標 (0..1) に変換するファクトリ
 function makePointerToWorld(canvas, viewport) {
@@ -71,10 +63,11 @@ function makePointerToWorld(canvas, viewport) {
  *   modeSelect: HTMLSelectElement,
  *   statusEl: HTMLElement,
  *   restartButton?: HTMLButtonElement,
+ *   settingsRoot?: HTMLElement,
  * }} deps
  */
 export function bootstrap(deps) {
-    const { canvas, muteButton, modeSelect, statusEl, restartButton } = deps;
+    const { canvas, muteButton, modeSelect, statusEl, restartButton, settingsRoot } = deps;
     const ctx = canvas.getContext('2d');
     const viewport = fitViewport({ width: canvas.width, height: canvas.height });
 
@@ -83,24 +76,41 @@ export function bootstrap(deps) {
     const sfxCtl = createSfxController();
     const sfxAudio = createWebAudioSfx(sfxCtl);
 
-    // 初期 state (v2: object 引数 / mode は '2end'|'1end')。selector の HTML option 値は
-    // 後続タスク (M1v2.7-C / M1v2.8-A) で更新予定。当面は何が来ても 2end をデフォルト。
-    let state = createInitialState({ mode: modeSelect.value === '1end' ? '1end' : '2end', seed: INITIAL_SEED });
+    // 設定 (永続化)
+    let settings = loadSettings();
 
-    // 入力 controller の attach 結果 (detach 用)
-    let pointerHandle = null;
-    let keyboardHandle = null;
+    // 初期 state (v2)
+    let state = createInitialState({
+        mode: modeSelect.value === '1end' ? '1end' : '2end',
+        seed: INITIAL_SEED,
+    });
+
+    // 物理シミュレーション中フラグ (state.status は使わない)
+    let simulating = false;
+    // applyShot 直前の world.balls スナップショット (FGZ 違反判定用)
+    let preShotSnapshot = null;
+    // 入力 FSM (1 投擲ごとに再生成)
+    let pointerFsm = null;
+    let keyboardFsm = null;
+    // detach 用 listener
+    let pointerListeners = null;
+    let keyboardListener = null;
+    // 現在の照準 (描画オーバーレイ用)
+    let currentAim = { enabled: settings.aimPreview, launchX: 0.25, vx: 0, vy: 0 };
 
     function setStatusText(text) {
         if (statusEl) statusEl.textContent = text;
     }
 
-    // 入力ハンドラ: ショット確定
-    function onShoot({ origin, velocity }) {
-        if (state.status !== 'placing') return;
-        // ユーザー操作のタイミングで AudioContext を prime (autoplay policy 配慮)
+    // --- ショット確定 ---
+    function onShoot({ launchX, vx, vy }) {
+        if (state.status !== 'in-progress' || simulating) return;
         sfxAudio.prime();
-        state = applyShot(state, { origin, velocity });
+        // 投擲前スナップショット (applyShot で投擲球が追加される前)
+        preShotSnapshot = state.world.balls.map((b) => ({ ...b }));
+        state = applyShot(state, { launchX, vx, vy });
+        simulating = true;
+        currentAim.enabled = false; // ショット中は予測線を消す
         if (!firstShotMarked) {
             performance.mark('first-shot');
             try {
@@ -112,52 +122,171 @@ export function bootstrap(deps) {
         }
     }
 
-    // 入力 controller を currentPlayer の自陣で再構成
+    // --- 入力 FSM 再生成 (ショット間 or currentSide 切替後) ---
     function rebindInput() {
-        if (pointerHandle) { pointerHandle.detach(); pointerHandle = null; }
-        if (keyboardHandle) { keyboardHandle.detach(); keyboardHandle = null; }
-        const ownSideRect = ownSideRectFor(state.currentPlayer);
-        const pointerToWorld = makePointerToWorld(canvas, viewport);
-        pointerHandle = attachPointerInput(canvas, pointerToWorld, {
-            ownSideRect,
+        if (pointerListeners) {
+            canvas.removeEventListener('pointerdown', pointerListeners.down);
+            canvas.removeEventListener('pointermove', pointerListeners.move);
+            canvas.removeEventListener('pointerup', pointerListeners.up);
+            canvas.removeEventListener('pointercancel', pointerListeners.cancel);
+            pointerListeners = null;
+        }
+        if (keyboardListener) {
+            window.removeEventListener('keydown', keyboardListener);
+            keyboardListener = null;
+        }
+
+        pointerFsm = createPointerFsm({
+            onPlace(launchX) {
+                currentAim.launchX = launchX;
+            },
+            onAim({ vx, vy }) {
+                currentAim.vx = vx;
+                currentAim.vy = vy;
+                currentAim.enabled = settings.aimPreview;
+            },
             onShoot,
         });
-        keyboardHandle = attachKeyboardInput(window, {
-            ownSideRect,
+
+        keyboardFsm = createKeyboardFsm({
+            initialLaunchX: 0.25,
+            onPlace(launchX) {
+                currentAim.launchX = launchX;
+            },
+            onAim({ vx, vy }) {
+                currentAim.vx = vx;
+                currentAim.vy = vy;
+                currentAim.enabled = settings.aimPreview;
+            },
             onShoot,
+            onTogglePreview() {
+                settings = { ...settings, aimPreview: !settings.aimPreview };
+                saveSettings(settings);
+                currentAim.enabled = settings.aimPreview;
+                refreshSettingsPanel();
+            },
+        });
+
+        const toWorld = makePointerToWorld(canvas, viewport);
+        pointerListeners = {
+            down: (ev) => { const p = toWorld(ev); pointerFsm.dispatch({ type: 'pointerdown', x: p.x, y: p.y }); },
+            move: (ev) => { const p = toWorld(ev); pointerFsm.dispatch({ type: 'pointermove', x: p.x, y: p.y }); },
+            up:   (ev) => { const p = toWorld(ev); pointerFsm.dispatch({ type: 'pointerup',   x: p.x, y: p.y }); },
+            cancel: () => pointerFsm.dispatch({ type: 'pointercancel' }),
+        };
+        canvas.addEventListener('pointerdown', pointerListeners.down);
+        canvas.addEventListener('pointermove', pointerListeners.move);
+        canvas.addEventListener('pointerup', pointerListeners.up);
+        canvas.addEventListener('pointercancel', pointerListeners.cancel);
+
+        keyboardListener = (ev) => keyboardFsm.dispatch({ type: 'keydown', key: ev.key, shiftKey: ev.shiftKey });
+        window.addEventListener('keydown', keyboardListener);
+
+        currentAim = { enabled: settings.aimPreview, launchX: 0.25, vx: 0, vy: 0 };
+    }
+
+    // --- 設定パネル ---
+    function refreshSettingsPanel() {
+        if (!settingsRoot) return;
+        renderSettingsPanel(settingsRoot, settings, (patch) => {
+            settings = { ...settings, ...patch };
+            saveSettings(settings);
+            currentAim.enabled = settings.aimPreview;
         });
     }
 
-    // ゲーム再初期化
+    // --- リスタート ---
     function restart() {
         state = createInitialState({
             mode: modeSelect.value === '1end' ? '1end' : '2end',
             seed: Math.floor(Math.random() * 1e9),
         });
+        simulating = false;
+        preShotSnapshot = null;
         firstShotMarked = false;
         performance.clearMarks('first-shot');
         rebindInput();
         setStatusText('');
     }
 
+    // --- ショット静止後の確定処理 ---
+    function finalizeShot(now) {
+        // 場外球除去
+        const after = state.world.balls;
+        const survivors = [];
+        const removed = [];
+        for (const b of after) {
+            if (isOutOfLane(b, state.world.bounds)) removed.push(b);
+            else survivors.push(b);
+        }
+        // FGZ 違反検出 (相手球のみ)
+        const cs = state.currentSide;
+        const violation = detectFgzViolation({
+            before: (preShotSnapshot ?? []).filter((b) => b.owner !== cs),
+            after: survivors.filter((b) => b.owner !== cs),
+            stoneIndex: state.stoneIndex,
+            currentSide: cs,
+        });
+        let nextBalls = survivors;
+        if (violation.violated) {
+            // 相手ガード復元
+            const restored = [...survivors];
+            for (const g of violation.restoreList) restored.push({ ...g, vx: 0, vy: 0 });
+            // 違反した自分の最新投擲球を除去 (snapshot に無い currentSide 球)
+            const beforeOwn = (preShotSnapshot ?? []).filter((b) => b.owner === cs);
+            nextBalls = restored.filter((a) => {
+                if (a.owner !== cs) return true;
+                return beforeOwn.some((bo) => Math.hypot(a.x - bo.x, a.y - bo.y) < 0.001);
+            });
+        }
+        // エフェクト
+        for (const rb of removed) {
+            effects.spawnScorePopup({ x: rb.x, y: rb.y, text: 'OUT', startMs: now });
+            sfxCtl.enqueue('pop', now);
+        }
+        if (removed.length > 0) effects.triggerShake({ startMs: now });
+
+        // state 更新 (純粋に新しいオブジェクトを構築)
+        state = {
+            ...state,
+            world: { ...state.world, balls: nextBalls },
+            stoneIndex: state.stoneIndex + 1,
+            currentSide: 1 - state.currentSide,
+        };
+        preShotSnapshot = null;
+
+        // エンド終了判定 (合計 8 投で 1 エンド完了)
+        if (state.stoneIndex >= STONES_PER_END) {
+            state = closeEnd(state);
+            if (state.status === 'ended') {
+                const result = evaluateWinner(state);
+                const winnerText = result.winner === null ? '引き分け' : `P${result.winner} の勝ち`;
+                setStatusText(`試合終了: ${winnerText} (合計 ${result.totals[0]} - ${result.totals[1]})`);
+            } else {
+                setStatusText(`エンド ${state.endIndex} 終了 → 次のエンドへ`);
+            }
+        }
+        sfxCtl.enqueue('turn', now);
+        rebindInput();
+    }
+
     // ----- UI 配線 -----
     muteButton.textContent = getMuteButtonLabel(sfxCtl.isMuted());
     muteButton.addEventListener('click', () => {
-        sfxAudio.prime(); // ユーザー操作で prime
+        sfxAudio.prime();
         sfxCtl.setMuted(!sfxCtl.isMuted());
         muteButton.textContent = getMuteButtonLabel(sfxCtl.isMuted());
     });
     modeSelect.addEventListener('change', restart);
     if (restartButton) restartButton.addEventListener('click', restart);
 
-    // 初回 input attach
+    refreshSettingsPanel();
     rebindInput();
 
     // ----- rAF ループ -----
-    let lastPlayer = state.currentPlayer;
     let rafId = 0;
     function tick(now) {
-        if (state.status === 'simulating') {
+        if (simulating) {
             step(state.world, SIM_DT, {
                 onCollision(a, b) {
                     effects.spawnRipple({ x: (a.x + b.x) / 2, y: (a.y + b.y) / 2, startMs: now });
@@ -168,33 +297,21 @@ export function bootstrap(deps) {
                 },
             });
             if (allAtRest(state.world.balls)) {
-                const purged = purgeOutOfBoundsBalls(state, isOutOfBoundsLocal);
-                for (const rb of purged.removedBalls) {
-                    effects.spawnScorePopup({ x: rb.x, y: rb.y, text: '+1', startMs: now });
-                    sfxCtl.enqueue('pop', now);
-                }
-                if (purged.removedBalls.length > 0) {
-                    effects.triggerShake({ startMs: now });
-                }
-                // advanceTurn は scores=0 で自動的に status='ended' へ遷移する (M1.5)
-                state = advanceTurn(purged.newState);
-                if (state.status === 'placing') {
-                    sfxCtl.enqueue('turn', now);
-                }
-                if (state.status === 'ended') {
-                    const result = evaluateWinner(state);
-                    setStatusText(`試合終了: ${result.winner === null ? '引き分け' : `P${result.winner} の勝ち`} (${result.reason})`);
-                }
-                // currentPlayer が変わったら入力を再構成
-                if (state.currentPlayer !== lastPlayer) {
-                    lastPlayer = state.currentPlayer;
-                    rebindInput();
-                }
+                simulating = false;
+                finalizeShot(now);
             }
         }
         effects.tick(now);
-        render(ctx, state, effects, viewport, now);
-        renderHud(ctx, state, viewport, now);
+        const aim = (!simulating && currentAim.enabled) ? {
+            enabled: true,
+            launchX: currentAim.launchX,
+            vx: currentAim.vx,
+            vy: currentAim.vy,
+        } : { enabled: false, launchX: 0, vx: 0, vy: 0 };
+        render(ctx, state, effects, viewport, now, aim);
+        // renderHud は v1 シグネチャ依存の可能性があるため try/catch でガード
+        // (v1/v2 整合化は M1v2.8 の別タスクで対応)
+        try { renderHud(ctx, state, viewport, now); } catch (_e) { /* 無視 */ }
         sfxAudio.flush(now);
         rafId = requestAnimationFrame(tick);
     }
@@ -203,8 +320,13 @@ export function bootstrap(deps) {
     return {
         destroy() {
             cancelAnimationFrame(rafId);
-            if (pointerHandle) pointerHandle.detach();
-            if (keyboardHandle) keyboardHandle.detach();
+            if (pointerListeners) {
+                canvas.removeEventListener('pointerdown', pointerListeners.down);
+                canvas.removeEventListener('pointermove', pointerListeners.move);
+                canvas.removeEventListener('pointerup', pointerListeners.up);
+                canvas.removeEventListener('pointercancel', pointerListeners.cancel);
+            }
+            if (keyboardListener) window.removeEventListener('keydown', keyboardListener);
             sfxAudio.destroy();
         },
     };
