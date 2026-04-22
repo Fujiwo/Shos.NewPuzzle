@@ -1,11 +1,7 @@
 ﻿// ゲーム状態管理 (v2 カーリング型 / 順次投擲モデル)。
 // 設計方針: 全公開関数は純粋 (入力 state を破壊せず新しい state を返す)。
-// rules.js には依存しない (本ファイル単独では未使用 / closeEnd 実装時 (M1v2.3-B) で使用予定)。
 
 import { createRng } from '../physics/rng.js';
-// scoreEnd は M1v2.3-B (closeEnd 実装) で使用予定。本タスクでは未使用だが
-// 後続タスクで参照する旨をコード上で明示するためインポートしておく。
-// eslint-disable-next-line no-unused-vars
 import { scoreEnd } from './rules.js';
 
 // ボード境界 (v2 カーリング型: 縦長レーン 0.5m x 1.5m)
@@ -85,4 +81,46 @@ export function isThinkTimeout(state, nowMs) {
 // TODO(M1v2.3-B): closeEnd ベースの実装に置換予定。現状は advanceTurn と同等。
 export function forceSkipShot(state) {
     return advanceTurn(state);
+}
+
+/**
+ * エンド終了処理。盤面から得点を計算し、次エンドへ遷移する。
+ * - scoreEnd で得点側と点数を確定 → endScores に push
+ * - 得点側がハンマー権を相手に譲る (ブランクエンド = side=null は保持)
+ * - endIndex / stoneIndex をリセット、balls をクリア
+ * - 全エンド消化 + 同点 + extraEndsUsed=0 ならエキストラエンド 1 回追加
+ * - 全エンド消化 + (同点でない or extraEndsUsed>=1) なら status='ended'
+ * @param {object} state
+ * @returns {object} 新しい state (純粋: 元 state は破壊しない)
+ */
+export function closeEnd(state) {
+    const next = cloneState(state);
+    const result = scoreEnd(next.world.balls);
+    next.endScores.push(result);
+
+    // ハンマー権遷移: 得点側があれば非得点側へ / ブランクは保持
+    if (result.side !== null) {
+        next.hammerSide = 1 - result.side;
+    }
+
+    // 次エンドへ
+    next.endIndex++;
+    next.stoneIndex = 0;
+    next.world.balls = [];
+    next.currentSide = next.hammerSide === 0 ? 1 : 0;
+
+    // 終了判定
+    const totalEnds = ENDS_PER_MATCH[next.mode] + next.extraEndsUsed;
+    if (next.endIndex >= totalEnds) {
+        const totals = [0, 0];
+        for (const es of next.endScores) {
+            if (es.side !== null) totals[es.side] += es.points;
+        }
+        if (totals[0] === totals[1] && next.extraEndsUsed < 1) {
+            next.extraEndsUsed++;
+        } else {
+            next.status = 'ended';
+        }
+    }
+    return next;
 }

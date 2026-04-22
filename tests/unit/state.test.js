@@ -8,6 +8,7 @@ import {
     createInitialState,
     setThinkDeadline,
     isThinkTimeout,
+    closeEnd,
 } from '../../src/game/state.js';
 
 // TODO(M1v2.3-B): closeEnd 実装後に v2 仕様 (endIndex / endScores / status 'ended') で再追加予定:
@@ -85,4 +86,34 @@ test('state: mode 2end は totalStones=16 / mode 1end は totalStones=8', () => 
     const b = createInitialState({ mode: '1end', seed: 1 });
     assertEqual(a.totalStones, 16, '2end totalStones');
     assertEqual(b.totalStones, 8, '1end totalStones');
+});
+
+// ---- M1v2.3-B: closeEnd エンド進行 -----------------------------------------
+
+test('state: closeEnd は scoreEnd 結果を endScores に追加し stoneIndex/balls をリセット', () => {
+    const s = createInitialState({ mode: '2end', seed: 1 });
+    s.world.balls.push({ x: 0.25, y: 0.20, vx: 0, vy: 0, r: 0.020, m: 1, owner: 0 });
+    const next = closeEnd(s);
+    assertEqual(next.endIndex, 1, 'endIndex+1');
+    assertEqual(next.stoneIndex, 0, 'stoneIndex リセット');
+    assertEqual(next.world.balls.length, 0, 'balls クリア');
+    assertEqual(next.endScores.length, 1, 'endScores 1 件');
+    assertEqual(next.endScores[0].side, 0, 'side=0');
+    assertEqual(next.endScores[0].points, 1, 'points=1');
+});
+
+test('state: closeEnd は得点側からハンマー権を相手側に渡す (ブランクは保持)', () => {
+    const s = createInitialState({ mode: '2end', seed: 1 });
+    const initialHammer = s.hammerSide;
+    s.world.balls.push({ x: 0.25, y: 0.20, vx: 0, vy: 0, r: 0.020, m: 1, owner: initialHammer });
+    const next = closeEnd(s);
+    // 得点側 = initialHammer → 次エンドのハンマーは 1 - initialHammer
+    assertEqual(next.hammerSide, 1 - initialHammer, 'ハンマー譲渡');
+});
+
+test('state: 1end モードは 1 エンド closeEnd で status=ended', () => {
+    let s = createInitialState({ mode: '1end', seed: 1 });
+    s.world.balls.push({ x: 0.25, y: 0.20, vx: 0, vy: 0, r: 0.020, m: 1, owner: 0 });
+    s = closeEnd(s);
+    assertEqual(s.status, 'ended', '1end は 1 エンドで終了');
 });
