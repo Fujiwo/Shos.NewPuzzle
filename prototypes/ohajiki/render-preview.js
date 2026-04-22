@@ -12,7 +12,7 @@ const ctx = canvas.getContext('2d');
 const logEl = document.getElementById('log');
 const viewport = fitViewport({ width: canvas.width, height: canvas.height });
 
-let state = createInitialState('10ball', 42);
+let state = createInitialState({ mode: '10ball', seed: 42 });
 const fx = createEffectManager();
 const sfx = createSfxController();
 const webAudio = createWebAudioSfx(sfx);
@@ -32,11 +32,11 @@ function ensurePrimed() {
 // ----- ボタン -----
 
 document.getElementById('btnNew10').addEventListener('click', () => {
-    state = createInitialState('10ball', Math.floor(Math.random() * 1e6));
+    state = createInitialState({ mode: '10ball', seed: Math.floor(Math.random() * 1e6) });
     log('新規ゲーム: 10球');
 });
 document.getElementById('btnNew6').addEventListener('click', () => {
-    state = createInitialState('6ball', Math.floor(Math.random() * 1e6));
+    state = createInitialState({ mode: '6ball', seed: Math.floor(Math.random() * 1e6) });
     log('新規ゲーム: 6球');
 });
 document.getElementById('btnRipple').addEventListener('click', () => {
