@@ -1,0 +1,31 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no">
+    <title>Physical Ohajiki (MVP-α)</title>
+    <link rel="stylesheet" href="styles/main.css">
+</head>
+<body>
+    <div class="hud">
+        <select id="mode-select">
+            <option value="10ball">10球モード</option>
+            <option value="6ball">6球モード</option>
+        </select>
+        <button id="mute-toggle">🔊 音 ON</button>
+        <button id="restart">リスタート</button>
+    </div>
+    <canvas id="game-canvas" width="600" height="600"></canvas>
+    <p id="status" class="hud"></p>
+    <script type="module">
+        import { bootstrap } from './src/main.js';
+        bootstrap({
+            canvas: document.getElementById('game-canvas'),
+            muteButton: document.getElementById('mute-toggle'),
+            modeSelect: document.getElementById('mode-select'),
+            statusEl: document.getElementById('status'),
+            restartButton: document.getElementById('restart'),
+        });
+    </script>
+</body>
+</html>
