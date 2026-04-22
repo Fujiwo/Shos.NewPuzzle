@@ -36,7 +36,8 @@ const INITIAL_SEED = 42;
 // 1 エンドあたりの総投擲数 (4 stones × 2 sides)
 const STONES_PER_END = 8;
 
-// Canvas のスクリーン座標を世界座標 (0..1) に変換するファクトリ
+// Canvas のスクリーン座標を世界座標に変換するファクトリ
+// v2 では world が 0..1 正方形とは限らないため、viewport / world bounds に追従する。
 function makePointerToWorld(canvas, viewport) {
     return (ev) => {
         const rect = canvas.getBoundingClientRect();
@@ -47,11 +48,23 @@ function makePointerToWorld(canvas, viewport) {
         const sy = canvas.height / rect.height;
         const px = screenX * sx;
         const py = screenY * sy;
-        const offsetX = (viewport.width - viewport.scale) / 2;
-        const offsetY = (viewport.height - viewport.scale) / 2;
+
+        const bounds = viewport.worldBounds ?? viewport.bounds ?? null;
+        const minX = bounds?.minX ?? bounds?.x ?? 0;
+        const minY = bounds?.minY ?? bounds?.y ?? 0;
+        const maxX = bounds?.maxX ?? (bounds ? minX + (bounds.width ?? 1) : 1);
+        const maxY = bounds?.maxY ?? (bounds ? minY + (bounds.height ?? 1) : 1);
+        const worldWidth = maxX - minX;
+        const worldHeight = maxY - minY;
+
+        const renderWidth = worldWidth * viewport.scale;
+        const renderHeight = worldHeight * viewport.scale;
+        const offsetX = (viewport.width - renderWidth) / 2;
+        const offsetY = (viewport.height - renderHeight) / 2;
+
         return {
-            x: (px - offsetX) / viewport.scale,
-            y: (py - offsetY) / viewport.scale,
+            x: (px - offsetX) / viewport.scale + minX,
+            y: (py - offsetY) / viewport.scale + minY,
         };
     };
 }
