@@ -3,8 +3,12 @@
 
 import { REST_EPS } from '../physics/engine.js';
 
-const DEFAULT_DT = 1 / 120;
-const DEFAULT_N_MAX = 240; // 2 秒分
+// K1 (Phase 2v2): 予測線専用に物理を粗化。本番物理 (dt=1/120) と独立。
+// - DEFAULT_DT = 1/30: 4 倍粗化で同じ実時間を 1/4 のステップ数でカバー
+// - DEFAULT_N_MAX = 1000: 33 秒@dt=1/30、|v|≤0.5 / mu≥0.3 の典型ショットで停止保証
+//   (REST_EPS 到達に必要な実時間 ~28 秒 → ~850 ステップ)
+const DEFAULT_DT = 1 / 30;
+const DEFAULT_N_MAX = 1000;
 
 /**
  * 摩擦のみの自由飛行軌道を返す。engine.js と同じ比率モデル + REST_EPS 丸め。
