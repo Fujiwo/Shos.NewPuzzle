@@ -243,7 +243,10 @@ export function bootstrap(deps) {
                 endScores: totals,
             });
             const loc = globalThis.location;
-            const base = loc ? `${loc.origin}${loc.pathname}` : '';
+            const base =
+                loc && loc.origin && loc.origin !== 'null'
+                    ? `${loc.origin}${loc.pathname}`
+                    : '';
             shareUrl = base ? `${base}?r=${encoded}` : `?r=${encoded}`;
         }
         renderShareControls(shareRoot, {
