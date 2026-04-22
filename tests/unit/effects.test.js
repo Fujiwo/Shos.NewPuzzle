@@ -5,7 +5,7 @@ import { test } from '../assert.js';
 import { assertEqual, assertClose, AssertionError } from '../assert.js';
 import { createEffectManager } from '../../src/render/effects.js';
 import { worldToScreen, getBallStyle } from '../../src/render/canvas.js';
-import { formatRemainingSeconds, formatScoreboard, TUTORIAL_TEXT } from '../../src/render/ui.js';
+import { formatRemainingSeconds, formatScoreboard, TUTORIAL_TEXT, getMuteButtonLabel } from '../../src/render/ui.js';
 
 // 範囲アサート (assert.js には含まれないので局所定義)
 function assertInRange(actual, lo, hi, msg) {
@@ -145,3 +145,13 @@ test('ui: formatScoreboard 6ball モード', () => {
 
 // TUTORIAL_TEXT 定数は ui.js から import してロード時の存在を担保 (テストカウント外)。
 void TUTORIAL_TEXT;
+
+// ---------- ui: getMuteButtonLabel ----------
+
+test('ui: getMuteButtonLabel(true) → "🔇 音 OFF"', () => {
+    assertEqual(getMuteButtonLabel(true), '🔇 音 OFF');
+});
+
+test('ui: getMuteButtonLabel(false) → "🔊 音 ON"', () => {
+    assertEqual(getMuteButtonLabel(false), '🔊 音 ON');
+});

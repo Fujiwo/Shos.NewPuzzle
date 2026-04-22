@@ -12,6 +12,7 @@ import './unit/keyboard.test.js';
 import './unit/state.test.js';
 import './unit/rules.test.js';
 import './unit/effects.test.js';
+import './unit/sfx.test.js';
 
 const summaryEl = document.getElementById('summary');
 const resultsEl = document.getElementById('results');

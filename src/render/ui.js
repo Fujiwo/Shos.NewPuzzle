@@ -91,3 +91,13 @@ export function renderHud(ctx, gameState, viewport, nowMs) {
 
     ctx.restore();
 }
+
+/**
+ * ミュートボタンのラベル文字列を返す。
+ * UI 部品 (HTML <button> 等) 側で表示更新に用いる純粋ヘルパ。
+ * @param {boolean} muted
+ * @returns {string}
+ */
+export function getMuteButtonLabel(muted) {
+    return muted ? '🔇 音 OFF' : '🔊 音 ON';
+}
