@@ -18,6 +18,7 @@ import './unit/fgz.test.js';
 import './unit/preview.test.js';
 import './unit/settings.test.js';
 import './unit/hud.test.js';
+import './unit/replay.test.js';
 
 const summaryEl = document.getElementById('summary');
 const resultsEl = document.getElementById('results');

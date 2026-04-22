@@ -84,3 +84,51 @@ button:hover {
     color: #F5E663;
     font-size: 14px;
 }
+
+/* M2v2.1 (Phase 2v2): 結果共有 UI
+ * 試合終了オーバーレイの直下に表示する共有ボタン + URL 表示 + 共有結果バナー。
+ */
+.share-panel {
+    display: inline-block;
+    background: rgba(45, 27, 14, 0.85);
+    border: 1px solid #F5E663;
+    border-radius: 6px;
+    padding: 8px 14px;
+    margin: 4px;
+    color: #F5E663;
+    font-size: 13px;
+    max-width: 90vw;
+}
+
+.share-imported {
+    margin-bottom: 6px;
+}
+
+.share-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+}
+
+.share-copy {
+    background: #F5E663;
+    color: #2D1B0E;
+    border: none;
+    border-radius: 4px;
+    padding: 6px 10px;
+    font-size: 13px;
+    font-weight: bold;
+    cursor: pointer;
+    min-height: 32px;
+}
+
+.share-copy:hover { filter: brightness(1.1); }
+
+.share-url {
+    color: #F5E663;
+    font-family: monospace;
+    font-size: 11px;
+    word-break: break-all;
+    opacity: 0.85;
+}
