@@ -49,10 +49,15 @@ export function allAtRest(balls) {
  * 同時 3 球衝突の反復解決は MVP スコープ外 (1 パス、残重なりは次 step で解消)。
  * @param {World} world
  * @param {number} dt
+ * @param {{ onCollision?: (a:Ball, b:Ball) => void, onWallHit?: (b:Ball) => void }} [options]
+ *   - onCollision: 円-円衝突解決成功時に (balls[i], balls[j]) で呼出 (effects/sfx 連携用)。
+ *   - onWallHit: 壁衝突解決成功時に当該 ball で呼出。
  * @returns {World} 同じ world 参照
  */
-export function step(world, dt) {
+export function step(world, dt, options = {}) {
     const { balls, bounds, params } = world;
+    const onCollision = options.onCollision;
+    const onWallHit = options.onWallHit;
     // 1) 引力で速度を更新
     applyGravity(balls, params.G, dt);
     // 2) 位置更新 (更新後の速度を使う = semi-implicit Euler)
@@ -63,12 +68,14 @@ export function step(world, dt) {
     // 3) 円-円衝突 (1 パス)
     for (let i = 0; i < balls.length; i++) {
         for (let j = i + 1; j < balls.length; j++) {
-            resolveCircleCircle(balls[i], balls[j], params.e);
+            const hit = resolveCircleCircle(balls[i], balls[j], params.e);
+            if (hit && onCollision) onCollision(balls[i], balls[j]);
         }
     }
     // 4) 壁衝突 (押し戻し + 法線速度反転)
     for (const b of balls) {
-        resolveCircleWall(b, bounds, params.e);
+        const hit = resolveCircleWall(b, bounds, params.e);
+        if (hit && onWallHit) onWallHit(b);
     }
     // 5) 摩擦 (REST_EPS 丸めも含む)
     for (const b of balls) {
@@ -83,13 +90,14 @@ export function step(world, dt) {
  * @param {World} world
  * @param {number} timeoutMs
  * @param {number} dt - 1 step あたりの秒
+ * @param {{ onCollision?: (a:Ball, b:Ball) => void, onWallHit?: (b:Ball) => void }} [options]
  * @returns {World} 同じ world 参照
  */
-export function runUntilRest(world, timeoutMs, dt) {
+export function runUntilRest(world, timeoutMs, dt, options) {
     const dtMs = dt * 1000;
     let elapsedMs = 0;
     while (elapsedMs < timeoutMs && !allAtRest(world.balls)) {
-        step(world, dt);
+        step(world, dt, options);
         elapsedMs += dtMs;
     }
     return world;

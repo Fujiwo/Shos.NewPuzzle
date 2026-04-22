@@ -149,3 +149,54 @@ test('engine: runUntilRest 短い timeoutMs で 1〜2 step のみ実行', () => 
         throw new Error(`x が 1〜2 step 進行範囲外: ${x}`);
     }
 });
+
+// ---- M1.8: onCollision / onWallHit callbacks ---------------------------------
+
+test('engine: step に onCollision を渡すと衝突解決時に呼ばれる', () => {
+    // M1.8: 衝突発生時にコールバック (a, b) で 1 回呼出される
+    const world = {
+        balls: [
+            { x: 48.5, y: 50, vx: 1, vy: 0, r: 1, m: 1 },
+            { x: 49.5, y: 50, vx: -1, vy: 0, r: 1, m: 1 },
+        ],
+        bounds: { x: 0, y: 0, w: 100, h: 100 },
+        params: { G: 0, e: 1, mu: 0 },
+    };
+    const calls = [];
+    step(world, 1 / 60, {
+        onCollision(a, b) { calls.push([a, b]); },
+    });
+    assertEqual(calls.length, 1, 'onCollision 呼出回数');
+    assertEqual(calls[0][0], world.balls[0], 'a 引数は balls[i] 参照');
+    assertEqual(calls[0][1], world.balls[1], 'b 引数は balls[j] 参照');
+});
+
+test('engine: step で離れた 2 球は onCollision を呼ばない', () => {
+    const world = {
+        balls: [
+            { x: 10, y: 50, vx: 0, vy: 0, r: 1, m: 1 },
+            { x: 80, y: 50, vx: 0, vy: 0, r: 1, m: 1 },
+        ],
+        bounds: { x: 0, y: 0, w: 100, h: 100 },
+        params: { G: 0, e: 1, mu: 0 },
+    };
+    let count = 0;
+    step(world, 1 / 60, {
+        onCollision() { count++; },
+    });
+    assertEqual(count, 0, '衝突なしなので 0 回');
+});
+
+test('engine: step で壁衝突時に onWallHit が呼ばれる', () => {
+    const world = {
+        balls: [{ x: 99.5, y: 50, vx: 5, vy: 0, r: 1, m: 1 }],
+        bounds: { x: 0, y: 0, w: 100, h: 100 },
+        params: { G: 0, e: 1, mu: 0 },
+    };
+    const hits = [];
+    step(world, 1 / 60, {
+        onWallHit(b) { hits.push(b); },
+    });
+    assertEqual(hits.length, 1, 'onWallHit 呼出回数');
+    assertEqual(hits[0], world.balls[0], '引数は当該ボール参照');
+});
