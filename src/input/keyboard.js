@@ -291,7 +291,7 @@ export function createKeyboardFsm(options = {}) {
     const initialDirectionRadians = options.initialDirectionRadians ?? DEFAULT_INITIAL_DIRECTION_RADIANS;
 
     let mode = 'placing';
-    let launchX = options.initialLaunchX ?? 0.25;
+    let launchX = clampLaunchX(options.initialLaunchX ?? 0.25);
     let directionIndex = 0;
     let powerLevel = 0;
 
