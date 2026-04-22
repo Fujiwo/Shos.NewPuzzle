@@ -179,3 +179,95 @@ export function renderSettingsPanel(container, settings, onChange) {
     container.appendChild(panel);
     return panel;
 }
+
+/**
+ * v2 スコアボード文字列。例:
+ *   in-progress: 'エンド 1/2  P0:0 P1:1  ハンマー: P0  投目 3/8'
+ *   ended:       '試合終了  P0:2 P1:3'
+ * @param {object} state - createInitialState 由来 v2 state
+ * @returns {string}
+ */
+export function formatScoreboardV2(state) {
+    const totals = [0, 0];
+    for (const es of state.endScores ?? []) {
+        if (es.side !== null) totals[es.side] += es.points;
+    }
+    if (state.status === 'ended') {
+        return `試合終了  P0:${totals[0]} P1:${totals[1]}`;
+    }
+    const totalEnds = (state.mode === '1end' ? 1 : 2) + (state.extraEndsUsed ?? 0);
+    const endNo = Math.min(totalEnds, (state.endIndex ?? 0) + 1);
+    const stoneNo = (state.stoneIndex ?? 0) + 1;
+    const ham = formatHammerLabel(state.hammerSide ?? null);
+    return `エンド ${endNo}/${totalEnds}  P0:${totals[0]} P1:${totals[1]}  ハンマー: ${ham}  投目 ${Math.min(8, stoneNo)}/8`;
+}
+
+/**
+ * v2 HUD を Canvas に描画。
+ * - 上端中央: formatScoreboardV2
+ * - 上端左:   現 side ラベル `▼ P0/P1 の番` (色分け)
+ * - 上端右:   computeScorePreview による現在ハウス得点
+ * - 下端中央: TUTORIAL_TEXT_V2
+ * - status==='ended' で勝者オーバーレイ
+ * @param {CanvasRenderingContext2D} ctx
+ * @param {object} state
+ * @param {{width:number, height:number, scale:number}} viewport
+ * @param {number} _nowMs
+ */
+export function renderHudV2(ctx, state, viewport, _nowMs) {
+    const { width, height } = viewport;
+    ctx.save();
+
+    // 上端中央: スコアボード
+    ctx.fillStyle = COLORS.p0;
+    ctx.font = 'bold 14px system-ui, sans-serif';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'top';
+    ctx.fillText(formatScoreboardV2(state), width / 2, 6);
+
+    // 上端左: 現 side
+    if (state.status !== 'ended') {
+        const cs = state.currentSide ?? 0;
+        ctx.fillStyle = cs === 0 ? COLORS.p0 : COLORS.p1;
+        ctx.font = 'bold 14px system-ui, sans-serif';
+        ctx.textAlign = 'left';
+        ctx.fillText(`▼ P${cs} の番`, 8, 6);
+    }
+
+    // 上端右: 現在のハウス得点プレビュー
+    const balls = state.world?.balls ?? [];
+    const sp = computeScorePreview(balls);
+    if (sp.side !== null && sp.points > 0) {
+        ctx.fillStyle = sp.side === 0 ? COLORS.p0 : COLORS.p1;
+        ctx.font = 'bold 12px system-ui, sans-serif';
+        ctx.textAlign = 'right';
+        ctx.fillText(`現状: P${sp.side} +${sp.points}`, width - 8, 6);
+    }
+
+    // 下端中央: チュートリアル
+    ctx.fillStyle = COLORS.p0;
+    ctx.font = '12px system-ui, sans-serif';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'bottom';
+    ctx.fillText(TUTORIAL_TEXT_V2, width / 2, height - 6);
+
+    // 終了オーバーレイ
+    if (state.status === 'ended') {
+        const totals = [0, 0];
+        for (const es of state.endScores ?? []) {
+            if (es.side !== null) totals[es.side] += es.points;
+        }
+        ctx.fillStyle = 'rgba(0, 0, 0, 0.55)';
+        ctx.fillRect(0, height / 2 - 40, width, 80);
+        ctx.fillStyle = COLORS.p0;
+        ctx.font = 'bold 28px system-ui, sans-serif';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        const msg = totals[0] === totals[1]
+            ? '引き分け'
+            : `勝者: P${totals[0] > totals[1] ? 0 : 1}`;
+        ctx.fillText(msg, width / 2, height / 2);
+    }
+
+    ctx.restore();
+}

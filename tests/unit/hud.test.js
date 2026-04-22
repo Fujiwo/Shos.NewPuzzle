@@ -124,3 +124,54 @@ test('hud: renderSettingsPanel 再呼出で container がクリアされる', ()
     renderSettingsPanel(container, { aimPreview: false }, () => {});
     assertEqual(container.children.length, 1, '再呼出後も panel は 1 件のみ');
 });
+
+test('hud: formatScoreboardV2 in-progress 初期 state', () => {
+    const state = {
+        status: 'in-progress',
+        mode: '2end',
+        endIndex: 0,
+        stoneIndex: 0,
+        extraEndsUsed: 0,
+        hammerSide: 0,
+        currentSide: 1,
+        endScores: [],
+    };
+    const s = formatScoreboardV2(state);
+    if (!s.includes('エンド 1/2')) throw new Error(`エンド表示なし: ${s}`);
+    if (!s.includes('P0:0 P1:0')) throw new Error(`スコア表示なし: ${s}`);
+    if (!s.includes('ハンマー: P0')) throw new Error(`ハンマー表示なし: ${s}`);
+    if (!s.includes('投目 1/8')) throw new Error(`投目表示なし: ${s}`);
+});
+
+test('hud: formatScoreboardV2 はエンド得点を集計', () => {
+    const state = {
+        status: 'in-progress',
+        mode: '2end',
+        endIndex: 1,
+        stoneIndex: 3,
+        extraEndsUsed: 0,
+        hammerSide: 1,
+        currentSide: 0,
+        endScores: [{ side: 0, points: 2 }],
+    };
+    const s = formatScoreboardV2(state);
+    if (!s.includes('P0:2 P1:0')) throw new Error(`集計失敗: ${s}`);
+    if (!s.includes('エンド 2/2')) throw new Error(`エンド進行表示なし: ${s}`);
+    if (!s.includes('投目 4/8')) throw new Error(`投目進行なし: ${s}`);
+});
+
+test('hud: formatScoreboardV2 ended は試合終了文字列', () => {
+    const state = {
+        status: 'ended',
+        mode: '2end',
+        endIndex: 2,
+        stoneIndex: 0,
+        extraEndsUsed: 0,
+        hammerSide: 0,
+        currentSide: 1,
+        endScores: [{ side: 0, points: 2 }, { side: 1, points: 3 }],
+    };
+    const s = formatScoreboardV2(state);
+    if (!s.includes('試合終了')) throw new Error(`試合終了なし: ${s}`);
+    if (!s.includes('P0:2 P1:3')) throw new Error(`集計失敗: ${s}`);
+});

@@ -17,7 +17,7 @@ import { createPointerFsm } from './input/pointer.js';
 import { createKeyboardFsm } from './input/keyboard.js';
 import { render, fitViewport } from './render/canvas.js';
 import {
-    renderHud,
+    renderHudV2,
     getMuteButtonLabel,
     renderSettingsPanel,
 } from './render/ui.js';
@@ -309,9 +309,7 @@ export function bootstrap(deps) {
             vy: currentAim.vy,
         } : { enabled: false, launchX: 0, vx: 0, vy: 0 };
         render(ctx, state, effects, viewport, now, aim);
-        // renderHud は v1 シグネチャ依存の可能性があるため try/catch でガード
-        // (v1/v2 整合化は M1v2.8 の別タスクで対応)
-        try { renderHud(ctx, state, viewport, now); } catch (_e) { /* 無視 */ }
+        renderHudV2(ctx, state, viewport, now);
         sfxAudio.flush(now);
         rafId = requestAnimationFrame(tick);
     }
