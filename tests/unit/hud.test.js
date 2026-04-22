@@ -7,6 +7,7 @@ import {
     computePowerLevel,
     computeScorePreview,
     formatHammerLabel,
+    formatScoreboardV2,
     renderSettingsPanel,
     TUTORIAL_TEXT_V2,
 } from '../../src/render/ui.js';
