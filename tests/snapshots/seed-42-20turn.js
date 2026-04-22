@@ -1,6 +1,6 @@
 // 自動生成: tests/tools/regen-snapshot.js から再生成可能
 // 手動編集禁止
-// M1v2.1-C: gravity 廃止 (v2 カーリング型) 後に再生成
+// 決定論性互換シナリオ用スナップショット (legacy params/bounds を固定)
 export const SNAPSHOT = {
     seed: 42,
     turns: 20,

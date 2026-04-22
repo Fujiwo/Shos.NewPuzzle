@@ -36,9 +36,28 @@ const INITIAL_SEED = 42;
 // 1 エンドあたりの総投擲数 (4 stones × 2 sides)
 const STONES_PER_END = 8;
 
-// Canvas のスクリーン座標を世界座標に変換するファクトリ
-// v2 では world が 0..1 正方形とは限らないため、viewport / world bounds に追従する。
-function makePointerToWorld(canvas, viewport) {
+/**
+ * 描画座標 (px) を world.bounds 基準の世界座標へ逆変換する。
+ * @param {number} px
+ * @param {number} py
+ * @param {{width:number,height:number}} viewport
+ * @param {{x:number,y:number,w:number,h:number}} bounds
+ * @returns {{x:number,y:number}}
+ */
+export function screenToWorldPoint(px, py, viewport, bounds) {
+    const fitted = fitViewport(viewport, bounds);
+    const contentWidth = bounds.w * fitted.scale;
+    const contentHeight = bounds.h * fitted.scale;
+    const offsetX = (fitted.width - contentWidth) / 2;
+    const offsetY = (fitted.height - contentHeight) / 2;
+    return {
+        x: (px - offsetX) / fitted.scale + bounds.x,
+        y: (py - offsetY) / fitted.scale + bounds.y,
+    };
+}
+
+// Canvas のスクリーン座標を世界座標 (world.bounds) に変換するファクトリ
+function makePointerToWorld(canvas, viewport, getBounds) {
     return (ev) => {
         const rect = canvas.getBoundingClientRect();
         const screenX = ev.clientX - rect.left;
@@ -48,24 +67,8 @@ function makePointerToWorld(canvas, viewport) {
         const sy = canvas.height / rect.height;
         const px = screenX * sx;
         const py = screenY * sy;
-
-        const bounds = viewport.worldBounds ?? viewport.bounds ?? null;
-        const minX = bounds?.minX ?? bounds?.x ?? 0;
-        const minY = bounds?.minY ?? bounds?.y ?? 0;
-        const maxX = bounds?.maxX ?? (bounds ? minX + (bounds.width ?? 1) : 1);
-        const maxY = bounds?.maxY ?? (bounds ? minY + (bounds.height ?? 1) : 1);
-        const worldWidth = maxX - minX;
-        const worldHeight = maxY - minY;
-
-        const renderWidth = worldWidth * viewport.scale;
-        const renderHeight = worldHeight * viewport.scale;
-        const offsetX = (viewport.width - renderWidth) / 2;
-        const offsetY = (viewport.height - renderHeight) / 2;
-
-        return {
-            x: (px - offsetX) / viewport.scale + minX,
-            y: (py - offsetY) / viewport.scale + minY,
-        };
+        const bounds = getBounds();
+        return screenToWorldPoint(px, py, viewport, bounds);
     };
 }
 
@@ -180,7 +183,11 @@ export function bootstrap(deps) {
             },
         });
 
-        const toWorld = makePointerToWorld(canvas, viewport);
+        const toWorld = makePointerToWorld(
+            canvas,
+            viewport,
+            () => state.world?.bounds ?? viewport.bounds ?? { x: 0, y: 0, w: 1, h: 1 }
+        );
         pointerListeners = {
             down: (ev) => { const p = toWorld(ev); pointerFsm.dispatch({ type: 'pointerdown', x: p.x, y: p.y }); },
             move: (ev) => { const p = toWorld(ev); pointerFsm.dispatch({ type: 'pointermove', x: p.x, y: p.y }); },

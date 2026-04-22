@@ -103,6 +103,15 @@ test('canvas: worldToScreen({0.5,0.5}, 600x600 scale 600) → {300,300}', () => 
     assertClose(p.y, 300, 1e-9);
 });
 
+test('canvas: worldToScreen は bounds=0.5x1.5 を中央寄せで変換する', () => {
+    const p = worldToScreen(
+        { x: 0.25, y: 1.45 },
+        { width: 400, height: 600, bounds: { x: 0, y: 0, w: 0.5, h: 1.5 } }
+    );
+    assertClose(p.x, 200, 1e-9);
+    assertClose(p.y, 580, 1e-9);
+});
+
 // ---------- canvas: getBallStyle (二重符号化) ----------
 
 test('canvas: getBallStyle owner=0 → ライトイエロー無地', () => {

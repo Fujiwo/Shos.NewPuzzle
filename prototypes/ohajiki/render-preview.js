@@ -12,7 +12,7 @@ const ctx = canvas.getContext('2d');
 const logEl = document.getElementById('log');
 const viewport = fitViewport({ width: canvas.width, height: canvas.height });
 
-let state = createInitialState({ mode: '10ball', seed: 42 });
+let state = createInitialState({ mode: '2end', seed: 42 });
 const fx = createEffectManager();
 const sfx = createSfxController();
 const webAudio = createWebAudioSfx(sfx);
@@ -32,11 +32,11 @@ function ensurePrimed() {
 // ----- ボタン -----
 
 document.getElementById('btnNew10').addEventListener('click', () => {
-    state = createInitialState({ mode: '10ball', seed: Math.floor(Math.random() * 1e6) });
+    state = createInitialState({ mode: '2end', seed: Math.floor(Math.random() * 1e6) });
     log('新規ゲーム: 10球');
 });
 document.getElementById('btnNew6').addEventListener('click', () => {
-    state = createInitialState({ mode: '6ball', seed: Math.floor(Math.random() * 1e6) });
+    state = createInitialState({ mode: '1end', seed: Math.floor(Math.random() * 1e6) });
     log('新規ゲーム: 6球');
 });
 document.getElementById('btnRipple').addEventListener('click', () => {
@@ -79,9 +79,9 @@ btnMute.addEventListener('click', () => {
 // ----- パフォーマンス計測 (Step 7: G5 ≤16ms 確認) -----
 
 document.getElementById('btnPerf').addEventListener('click', () => {
-    const perfState = createInitialState('10ball', 7); // 10 球
+    const perfState = createInitialState({ mode: '2end', seed: 7 }); // 10 球
     // 20 球相当を作るため、もう一度 6ball state を足してダミー描画する
-    const extra = createInitialState('10ball', 8);
+    const extra = createInitialState({ mode: '2end', seed: 8 });
     perfState.world.balls = perfState.world.balls.concat(extra.world.balls);
     const perfFx = createEffectManager();
     const FRAMES = 100;

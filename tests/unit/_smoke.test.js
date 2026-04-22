@@ -3,6 +3,7 @@
 import { test, assertEqual, assertClose } from '../assert.js';
 import { render, fitViewport } from '../../src/render/canvas.js';
 import { createEffectManager } from '../../src/render/effects.js';
+import { screenToWorldPoint } from '../../src/main.js';
 
 test('smoke: assertEqual passes for 1+1===2', () => {
     assertEqual(1 + 1, 2);
@@ -73,4 +74,29 @@ test('smoke: render は aim.enabled=false で軌道線を描画しない', () =>
     render(ctx, state, effects, vp, 0, aim);
     const calledSetLineDash = ctx._calls.some((c) => c.method === 'setLineDash');
     if (calledSetLineDash) throw new Error('aim.enabled=false なのに drawTrajectory が呼ばれた');
+});
+
+test('smoke: render の枠線は world.bounds の縦横比 (0.5x1.5) に一致する', () => {
+    const ctx = createCtxMock();
+    const state = createMinimalState();
+    const effects = createEffectManager();
+    const vp = fitViewport({ width: 400, height: 600 });
+    render(ctx, state, effects, vp, 0);
+    const strokeRectCall = ctx._calls.find((c) => c.method === 'strokeRect');
+    if (!strokeRectCall) throw new Error('strokeRect が呼ばれていない');
+    assertClose(strokeRectCall.args[0], 100, 1e-9);
+    assertClose(strokeRectCall.args[1], 0, 1e-9);
+    assertClose(strokeRectCall.args[2], 200, 1e-9);
+    assertClose(strokeRectCall.args[3], 600, 1e-9);
+});
+
+test('smoke: screenToWorldPoint は bounds を反映して逆変換する', () => {
+    const p = screenToWorldPoint(
+        200,
+        580,
+        { width: 400, height: 600 },
+        { x: 0, y: 0, w: 0.5, h: 1.5 }
+    );
+    assertClose(p.x, 0.25, 1e-9);
+    assertClose(p.y, 1.45, 1e-9);
 });

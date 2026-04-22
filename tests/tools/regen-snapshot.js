@@ -50,6 +50,7 @@ function buildSource(finalBalls) {
     const body = finalBalls.map(formatBall).join('\n');
     return `// 自動生成: tests/tools/regen-snapshot.js から再生成可能
 // 手動編集禁止
+// 決定論性互換シナリオ用スナップショット (legacy params/bounds を固定)
 export const SNAPSHOT = {
     seed: ${SEED},
     turns: ${INPUTS.length},

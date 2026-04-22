@@ -11,6 +11,7 @@ const PARAMS = Object.freeze({ e: 0.85, mu: 0.3 });
 // ストーン半径 / 質量 (M1v2.5 で投擲時に使用予定 — 公開しておく)
 export const BALL_RADIUS = 0.020;
 export const BALL_MASS = 1;
+export const LAUNCH_Y = 1.45;
 
 const STONES_PER_END_PER_PLAYER = 4;
 const ENDS_PER_MATCH = Object.freeze({ '2end': 2, '1end': 1 });

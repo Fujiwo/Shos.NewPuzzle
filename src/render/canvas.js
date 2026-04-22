@@ -72,8 +72,10 @@ export function render(ctx, gameState, effects, viewport, nowMs, aim) {
     const worldBounds = gameState.world?.bounds ?? viewport.bounds ?? { x: 0, y: 0, w: 1, h: 1 };
     const resolvedViewport = fitViewport(viewport, worldBounds);
     const { width, height, scale } = resolvedViewport;
-    const offsetX = (width - scale) / 2;
-    const offsetY = (height - scale) / 2;
+    const contentWidth = worldBounds.w * scale;
+    const contentHeight = worldBounds.h * scale;
+    const offsetX = (width - contentWidth) / 2;
+    const offsetY = (height - contentHeight) / 2;
     const shake = effects.getShakeOffset(nowMs);
 
     // 背景クリア
@@ -84,15 +86,15 @@ export function render(ctx, gameState, effects, viewport, nowMs, aim) {
     // シェイクは盤面 + 球のみに適用 (HUD は固定)
     ctx.translate(shake.dx, shake.dy);
 
-    // 枠線 (bounds 1.0×1.0 を viewport にフィット)
+    // 枠線 (world.bounds を viewport にフィット)
     ctx.strokeStyle = COLORS.bounds;
     ctx.lineWidth = 4;
-    ctx.strokeRect(offsetX, offsetY, scale, scale);
+    ctx.strokeRect(offsetX, offsetY, contentWidth, contentHeight);
 
     // 球
     const balls = gameState.world?.balls ?? [];
     for (const b of balls) {
-        const p = worldToScreen({ x: b.x, y: b.y }, viewport);
+        const p = worldToScreen({ x: b.x, y: b.y }, resolvedViewport);
         const r = b.r * scale;
         const style = getBallStyle(b);
         ctx.fillStyle = style.fillColor;
@@ -111,7 +113,7 @@ export function render(ctx, gameState, effects, viewport, nowMs, aim) {
 
     // 波紋 (リング状フェード)
     for (const rp of effects.getActiveRipples(nowMs)) {
-        const p = worldToScreen({ x: rp.x, y: rp.y }, viewport);
+        const p = worldToScreen({ x: rp.x, y: rp.y }, resolvedViewport);
         const baseR = 0.025 * scale; // BALL_RADIUS と同じ基準
         const radius = baseR * (1 + rp.progress * 2.5);
         ctx.strokeStyle = COLORS.ripple;
@@ -125,7 +127,7 @@ export function render(ctx, gameState, effects, viewport, nowMs, aim) {
 
     // スコアポップアップ (+N が上昇しながらフェード)
     for (const pop of effects.getActivePopups(nowMs)) {
-        const p = worldToScreen({ x: pop.x, y: pop.y }, viewport);
+        const p = worldToScreen({ x: pop.x, y: pop.y }, resolvedViewport);
         ctx.fillStyle = COLORS.popup;
         ctx.globalAlpha = pop.opacity;
         ctx.font = 'bold 20px system-ui, sans-serif';
@@ -143,7 +145,7 @@ export function render(ctx, gameState, effects, viewport, nowMs, aim) {
             gameState.world.params,
             gameState.world.bounds
         );
-        drawTrajectory(ctx, path, (p) => worldToScreen(p, viewport));
+        drawTrajectory(ctx, path, (p) => worldToScreen(p, resolvedViewport));
     }
 
     ctx.restore();

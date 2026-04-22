@@ -249,6 +249,11 @@ test('keyboard-fsm: launchX は [0.05, 0.45] にクランプ', () => {
     assertClose(events[1], 0.05, TOL, 'min clamp 2');
 });
 
+test('keyboard-fsm: initialLaunchX は初期化時にクランプされる', () => {
+    const fsm = createKeyboardFsm({ initialLaunchX: -1 });
+    assertClose(fsm.getLaunchX(), 0.05, TOL, '初期クランプ');
+});
+
 test('keyboard-fsm: T キー (大文字小文字とも) で onTogglePreview', () => {
     let toggled = 0;
     const fsm = createKeyboardFsm({
