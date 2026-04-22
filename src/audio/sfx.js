@@ -94,10 +94,13 @@ export function playOne(audioCtx, params) {
  * AudioContext は autoplay policy 回避のため prime() 呼出時に遅延生成する。
  *
  * @param {ReturnType<typeof createSfxController>} controller
- * @param {() => AudioContext} [ctxFactory]
+ * @param {() => AudioContext|null} [ctxFactory]
  */
 export function createWebAudioSfx(controller, ctxFactory) {
-    const factory = ctxFactory || (() => new (globalThis.AudioContext || globalThis.webkitAudioContext)());
+    const factory = ctxFactory || (() => {
+        const AudioContextCtor = globalThis.AudioContext || globalThis.webkitAudioContext;
+        return AudioContextCtor ? new AudioContextCtor() : null;
+    });
     /** @type {AudioContext|null} */
     let audioCtx = null;
 
@@ -105,7 +108,9 @@ export function createWebAudioSfx(controller, ctxFactory) {
         // 必ずユーザー操作 (click 等) のハンドラ内で 1 回呼ぶこと。
         prime() {
             if (audioCtx) return;
-            audioCtx = factory();
+            const ctx = factory();
+            if (!ctx) return;
+            audioCtx = ctx;
             // 一部ブラウザは初期 state='suspended' のため明示 resume。
             if (audioCtx.state === 'suspended' && typeof audioCtx.resume === 'function') {
                 audioCtx.resume();
