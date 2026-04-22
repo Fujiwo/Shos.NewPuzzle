@@ -22,9 +22,18 @@
 const DEFAULT_STRENGTH_COEF = 4.0;
 const DEFAULT_MAX_DRAG = 0.3;
 
+// v2 placing FSM 用: 自陣 lane 内の launch 位置 X 範囲 (世界座標)。
+const LAUNCH_X_MIN = 0.05;
+const LAUNCH_X_MAX = 0.45;
+const LAUNCH_Y = 1.45;
+
 // 矩形内判定 (境界含む)
 function isInsideRect(p, r) {
     return p.x >= r.x0 && p.x <= r.x1 && p.y >= r.y0 && p.y <= r.y1;
+}
+
+function clampLaunchX(x) {
+    return Math.max(LAUNCH_X_MIN, Math.min(LAUNCH_X_MAX, x));
 }
 
 // drag = origin - current → velocity = drag * strengthCoef、|drag| <= maxDragDistance にクランプ。
@@ -142,5 +151,84 @@ export function attachPointerInput(target, getLocalPoint, controllerOptions) {
             target.removeEventListener('pointerup', onUp);
             target.removeEventListener('pointercancel', onCancel);
         },
+    };
+}
+
+/**
+ * v2 placing+aiming 統合 FSM (dispatch スタイル)。
+ * 1 投擲のライフサイクル全体を 1 つの FSM で管理する。
+ *
+ * 状態遷移:
+ *   placing       -- pointerdown      → placing-drag    (launchX=clamp(x), onPlace)
+ *   placing-drag  -- pointermove      → placing-drag    (launchX=clamp(x), onPlace)
+ *   placing-drag  -- pointerup        → aiming
+ *   placing-drag  -- pointercancel    → placing
+ *   aiming        -- pointerdown      → aiming-power    (origin 記録)
+ *   aiming-power  -- pointermove      → aiming-power    (onAim)
+ *   aiming-power  -- pointerup        → done            (onShoot)
+ *   aiming-power  -- pointercancel    → aiming          (origin リセット)
+ *
+ * @param {Object} options
+ * @param {{x:number,y:number,w:number,h:number}} [options.bounds] - レーン bounds (将来拡張用)
+ * @param {(launchX:number) => void} [options.onPlace]
+ * @param {(velocity:{vx:number,vy:number}) => void} [options.onAim]
+ * @param {(shot:{launchX:number, vx:number, vy:number}) => void} [options.onShoot]
+ * @param {number} [options.strengthCoef=4.0]
+ * @param {number} [options.maxDragDistance=0.3]
+ * @returns {{ dispatch:(ev:any)=>void, getMode:()=>string, getLaunchX:()=>number }}
+ */
+export function createPointerFsm(options) {
+    const onPlace = options.onPlace;
+    const onAim = options.onAim;
+    const onShoot = options.onShoot;
+    const strengthCoef = options.strengthCoef ?? DEFAULT_STRENGTH_COEF;
+    const maxDragDistance = options.maxDragDistance ?? DEFAULT_MAX_DRAG;
+
+    let mode = 'placing';
+    let launchX = (LAUNCH_X_MIN + LAUNCH_X_MAX) / 2;
+    let aimOrigin = null;
+
+    function dispatch(ev) {
+        if (mode === 'placing') {
+            if (ev.type === 'pointerdown') {
+                launchX = clampLaunchX(ev.x);
+                if (onPlace) onPlace(launchX);
+                mode = 'placing-drag';
+            }
+        } else if (mode === 'placing-drag') {
+            if (ev.type === 'pointermove') {
+                launchX = clampLaunchX(ev.x);
+                if (onPlace) onPlace(launchX);
+            } else if (ev.type === 'pointerup') {
+                mode = 'aiming';
+            } else if (ev.type === 'pointercancel') {
+                mode = 'placing';
+            }
+        } else if (mode === 'aiming') {
+            if (ev.type === 'pointerdown') {
+                aimOrigin = { x: ev.x, y: ev.y };
+                mode = 'aiming-power';
+            }
+        } else if (mode === 'aiming-power') {
+            if (ev.type === 'pointermove') {
+                const v = computeVelocity(aimOrigin, ev, strengthCoef, maxDragDistance);
+                if (onAim) onAim(v);
+            } else if (ev.type === 'pointerup') {
+                const v = computeVelocity(aimOrigin, ev, strengthCoef, maxDragDistance);
+                if (onShoot) onShoot({ launchX, vx: v.vx, vy: v.vy });
+                aimOrigin = null;
+                mode = 'done';
+            } else if (ev.type === 'pointercancel') {
+                aimOrigin = null;
+                mode = 'aiming';
+            }
+        }
+        // mode === 'done' は no-op
+    }
+
+    return {
+        dispatch,
+        getMode: () => mode,
+        getLaunchX: () => launchX,
     };
 }
