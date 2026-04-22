@@ -4,15 +4,12 @@
 
 import { detectFgzViolation, isOutOfLane } from './fgz.js';
 import { step, allAtRest } from '../physics/engine.js';
+import { LAUNCH_Y, BALL_RADIUS, BALL_MASS } from './state.js';
 
 /**
  * @typedef {{x:number, y:number, vx:number, vy:number, r:number, m:number, owner:0|1}} Ball
  * @typedef {object} GameState
  */
-
-const LAUNCH_Y = 1.45;
-const BALL_RADIUS = 0.020;
-const BALL_MASS = 1;
 
 // state.world を shallow + balls を deep clone して新しい world を返す。
 function cloneWorld(world) {
