@@ -15,6 +15,7 @@ import './unit/sfx.test.js';
 import './unit/loop.test.js';
 import './unit/house.test.js';
 import './unit/fgz.test.js';
+import './unit/preview.test.js';
 
 const results = await runAll();
 let passed = 0, failed = 0;
