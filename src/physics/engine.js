@@ -39,12 +39,12 @@ export function allAtRest(balls) {
 /**
  * @typedef {{ x:number, y:number, vx:number, vy:number, r:number, m:number }} Ball
  * @typedef {{ x:number, y:number, w:number, h:number }} Rect
- * @typedef {{ balls: Ball[], bounds: Rect, params: { G:number, e:number, mu:number } }} World
+ * @typedef {{ balls: Ball[], bounds: Rect, params: { e:number, mu:number } }} World
  */
 
 /**
  * 1 frame シミュレーションを進める (in-place)。
- * 内部適用順: gravity → 位置更新 (semi-implicit Euler) → 円-円衝突 → 壁衝突 → 摩擦。
+ * 内部適用順: 位置更新 (semi-implicit Euler) → 円-円衝突 → 壁衝突 → 摩擦。
  * 同時 3 球衝突の反復解決は MVP スコープ外 (1 パス、残重なりは次 step で解消)。
  * @param {World} world
  * @param {number} dt
@@ -57,24 +57,24 @@ export function step(world, dt, options = {}) {
     const { balls, bounds, params } = world;
     const onCollision = options.onCollision;
     const onWallHit = options.onWallHit;
-    // 2) 位置更新 (更新後の速度を使う = semi-implicit Euler)
+    // 1) 位置更新 (更新後の速度を使う = semi-implicit Euler)
     for (const b of balls) {
         b.x += b.vx * dt;
         b.y += b.vy * dt;
     }
-    // 3) 円-円衝突 (1 パス)
+    // 2) 円-円衝突 (1 パス)
     for (let i = 0; i < balls.length; i++) {
         for (let j = i + 1; j < balls.length; j++) {
             const hit = resolveCircleCircle(balls[i], balls[j], params.e);
             if (hit && onCollision) onCollision(balls[i], balls[j]);
         }
     }
-    // 4) 壁衝突 (押し戻し + 法線速度反転)
+    // 3) 壁衝突 (押し戻し + 法線速度反転)
     for (const b of balls) {
         const hit = resolveCircleWall(b, bounds, params.e);
         if (hit && onWallHit) onWallHit(b);
     }
-    // 5) 摩擦 (REST_EPS 丸めも含む)
+    // 4) 摩擦 (REST_EPS 丸めも含む)
     for (const b of balls) {
         applyFriction(b, params.mu, dt);
     }
