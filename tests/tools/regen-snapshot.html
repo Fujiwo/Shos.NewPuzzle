@@ -1,0 +1,78 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <title>Snapshot 再生成 (ブラウザ目視確認用)</title>
+    <style>
+        body { font-family: system-ui, sans-serif; padding: 16px; max-width: 960px; margin: 0 auto; }
+        h1 { font-size: 1.2em; }
+        pre { background: #f4f4f4; border: 1px solid #ccc; padding: 12px; overflow-x: auto; white-space: pre-wrap; word-break: break-all; }
+        .hint { color: #666; font-size: 0.9em; }
+        button { margin-bottom: 8px; padding: 6px 12px; }
+    </style>
+</head>
+<body>
+    <h1>Snapshot 再生成 (seed=42, 20 turns)</h1>
+    <p class="hint">
+        本ページは Node 版 <code>tests/tools/regen-snapshot.js</code> と同じ内容を生成し、
+        <code>&lt;pre&gt;</code> に出力する。出力結果を <code>tests/snapshots/seed-42-20turn.js</code> に
+        手動コピペで上書きすること。<br>
+        正規ワークフローは Node の <code>node tests/tools/regen-snapshot.js</code> を使用する。
+        本ページは V8 (Chrome) と Node の挙動差異を目視確認したい場合の補助。
+    </p>
+    <button id="copy">クリップボードへコピー</button>
+    <pre id="output">(実行中...)</pre>
+
+    <script type="module">
+        import {
+            buildInitialWorld,
+            INPUTS,
+            runOneTurn,
+            SEED,
+            PARAMS,
+            BOUNDS,
+        } from '../fixtures/scenario-seed-42.js';
+
+        function generate() {
+            const world = buildInitialWorld(SEED);
+            for (const input of INPUTS) {
+                runOneTurn(world, input);
+            }
+            return world.balls.map(b => ({ x: b.x, y: b.y, vx: b.vx, vy: b.vy }));
+        }
+
+        function formatBall(b) {
+            return `        { x: ${b.x}, y: ${b.y}, vx: ${b.vx}, vy: ${b.vy} },`;
+        }
+
+        function buildSource(finalBalls) {
+            const body = finalBalls.map(formatBall).join('\n');
+            return `// 自動生成: tests/tools/regen-snapshot.js から再生成可能
+// 手動編集禁止
+export const SNAPSHOT = {
+    seed: ${SEED},
+    turns: ${INPUTS.length},
+    params: { G: ${PARAMS.G}, e: ${PARAMS.e}, mu: ${PARAMS.mu} },
+    bounds: { x: ${BOUNDS.x}, y: ${BOUNDS.y}, w: ${BOUNDS.w}, h: ${BOUNDS.h} },
+    finalBalls: [
+${body}
+    ],
+};
+`;
+        }
+
+        const out = document.getElementById('output');
+        const source = buildSource(generate());
+        out.textContent = source;
+
+        document.getElementById('copy').addEventListener('click', async () => {
+            try {
+                await navigator.clipboard.writeText(source);
+                alert('コピーしました');
+            } catch (e) {
+                alert('コピー失敗: ' + e.message);
+            }
+        });
+    </script>
+</body>
+</html>

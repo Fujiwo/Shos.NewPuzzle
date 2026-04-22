@@ -1,0 +1,48 @@
+/* Physical Ohajiki - 共通スタイル */
+body {
+    margin: 0;
+    padding: 0;
+    background: #1A2E1A;
+    color: #F5E663;
+    font-family: system-ui, -apple-system, sans-serif;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    min-height: 100vh;
+}
+
+canvas {
+    display: block;
+    background: #1A2E1A;
+    border: 2px solid #2D1B0E;
+    touch-action: none; /* ピンチズーム抑止 (Pointer Events 用) */
+    max-width: 100%;
+    height: auto;
+}
+
+.hud {
+    margin: 8px 0;
+    text-align: center;
+}
+
+button {
+    background: #2D1B0E;
+    color: #F5E663;
+    border: 1px solid #F5E663;
+    padding: 6px 12px;
+    margin: 4px;
+    font: inherit;
+    cursor: pointer;
+}
+
+button:hover {
+    background: #3d2616;
+}
+
+#log {
+    color: #F5E663;
+    font-family: monospace;
+    font-size: 12px;
+    white-space: pre-wrap;
+    max-width: 600px;
+}

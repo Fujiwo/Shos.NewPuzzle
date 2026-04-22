@@ -1,0 +1,25 @@
+<!doctype html>
+<html lang="ja">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <title>Physical Ohajiki - Render Preview (M1.6 目視確認)</title>
+    <link rel="stylesheet" href="../../styles/main.css" />
+</head>
+<body>
+    <h1 style="font-size: 16px; margin: 8px;">M1.6 Render Preview (本番ではありません)</h1>
+    <canvas id="canvas" width="600" height="600"></canvas>
+    <div class="hud">
+        <button id="btnNew10">新規ゲーム 10球</button>
+        <button id="btnNew6">新規ゲーム 6球</button>
+        <button id="btnRipple">波紋エフェクトテスト</button>
+        <button id="btnPopup">スコアポップアップテスト</button>
+        <button id="btnShake">シェイクテスト</button>
+        <button id="btnTurn">ターン進行</button>
+        <button id="btnPerf">Perf 計測 (20球×100フレーム)</button>
+        <button id="btnMute">🔊 音 ON</button>
+    </div>
+    <pre id="log"></pre>
+    <script type="module" src="./render-preview.js"></script>
+</body>
+</html>

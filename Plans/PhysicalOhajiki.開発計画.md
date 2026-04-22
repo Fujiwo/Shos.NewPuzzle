@@ -123,7 +123,7 @@
 | フレームワーク | **不採用** (React/Vue/Angular/jQuery) | リポジトリ方針 |
 | バックエンド | **不採用** (MVP) | アイディア §6.2 採用条件未達 |
 | テストランナー | **ブラウザネイティブ** (`/tests/runner.html` + 自作 minimal assert) | 依存ゼロ志向 |
-| パッケージマネージャ | **不使用** (実行時依存ゼロ) | 依存ゼロ志向 |
+| パッケージマネージャ | **不使用** (実行時依存ゼロ)。`package.json` は `{"type":"module"}` 1 行のみ可 (Node ESM 実行用 / dependencies なし) | 依存ゼロ志向 |
 | 開発時ツール | ローカル静的サーバ (`python -m http.server` 等任意) | ES Modules CORS 制約のみ対処 |
 
 > **依存ゼロ判断**: テストランナーも外部ライブラリ (Jest / Vitest) を使わず自作する。理由は「20 個程度の単体テストに数 MB のビルドチェーンを持ち込むトレードオフが釣り合わない」+「ブラウザ単体で実行できることが本案の価値を体現する」ため。
@@ -233,11 +233,13 @@ export type ShotInput = { ballIndex: number, vx: number, vy: number };
 
 **目的**: §7 リプレイ機能 / §7.1 URL シード非同期対戦の前提を保証する。
 
-**方式**: 同一シード + 同一入力列で N=20 ターン実行後、全球の `(x, y, vx, vy)` をスナップショット (JSON) と**ビット一致**で比較。
+**方式**: 同一シード + 同一入力列で N=20 ターン実行後、全球の `(x, y, vx, vy)` をスナップショット (JS export const) と**ビット一致** (`JSON.stringify` 文字列比較) で比較。スナップショット形式は `.json` ではなく `.js` (`export const SNAPSHOT = {...}`) を採用 (依存ゼロで Node/ブラウザ両対応 / JSON import attribute の互換性問題回避)。
 
-**実装場所**: `/tests/unit/determinism.test.js`
+**実装場所**: `/tests/unit/determinism.test.js` / `tests/snapshots/seed-42-20turn.js` / `tests/fixtures/scenario-seed-42.js` / `tests/tools/regen-snapshot.js`
 
-**合格基準**: 100 回連続実行で差分ゼロ。
+**合格基準**: 100 回連続実行で差分ゼロ (M1.2 で達成済)。
+
+> **クロスエンジン bit 一致は未検証 (M1.2 残課題)**: 現在の検証は同一 Node V8 上での自己一致のみ。`Math.hypot` は ECMA-262 上 overflow/underflow 防止の実装裁量があり、V8/SpiderMonkey/JavaScriptCore 間で末尾 bit が異なる可能性がある。`Math.imul` (RNG 内) は厳密規定のため安全。**§7.1 URL シード非同期対戦を実装する前** に Chrome / Firefox / Safari でクロス再現テストを実施すること (担当: M2.1 リプレイ機能着手時)。
 
 ### 5.4 性能テスト
 
@@ -373,7 +375,7 @@ export type ShotInput = { ballIndex: number, vx: number, vy: number };
 
 #### Sub-task 1.1.C: 円-円衝突
 
-- [ ] **Step 1: 失敗テスト記述** — 「等質量正面衝突 → 速度交換」「e=0.5 で運動エネルギー 25% 損失」「直交衝突」3 ケース
+- [ ] **Step 1: 失敗テスト記述** — 「等質量正面衝突 → 速度交換」「e=0.5 で残存運動エネルギー 25% (= 損失 75%)」「直交衝突」3 ケース
 - [ ] **Step 2: テスト実行 → 失敗確認** — `collision.test.js` が FAIL することを確認
 - [ ] **Step 3: 実装** — `src/physics/collision.js` に法線方向の弾性衝突公式で `resolveCircleCircle` を実装:
   ```js
@@ -546,12 +548,14 @@ export type ShotInput = { ballIndex: number, vx: number, vy: number };
 
 **Files:**
 - Create: `src/audio/sfx.js`
-- Create: `assets/sounds/click.wav` (100ms 程度の「カチッ」音)
+- ~~Create: `assets/sounds/click.wav`~~ → **不採用 (M1.7 実装時に変更)**: 依存ゼロ志向 / バイナリコミット回避のため `OscillatorNode` + `GainNode` で `click` (1200Hz triangle 50ms) / `pop` (600Hz square 120ms) / `turn` (440Hz sine 150ms) を合成。`getSoundParams(eventName)` で一元管理しコードレビューで音色調整可能。
 
-- [ ] **Step 1: WebAudio API でロード/再生実装**
+- [ ] **Step 1: WebAudio API で合成・再生実装** (純粋 controller + browser adapter の二層)
 - [ ] **Step 2: 弾き出し時に再生フック追加**
 - [ ] **Step 3: ミュート切替 UI 追加**
 - [ ] **Step 4: コミット** — `feat(audio): collision and knock-out sfx`
+
+> **M1.8 への引き継ぎ事項 (M1.7 で発覚)**: 球-球衝突音 (`click`) は `engine.step()` 内部で発生するため main.js 側 polling では拾えない。**`step(state, dt, { onCollision })` にコールバック引数を 1 個追加し、`collision.js` の resolve 呼出箇所 1 ヶ所で発火させる方針** を M1.8 で採用予定。`pop` (場外) と `turn` (ターン番号差分) は main.js 側の状態 diff で検出可能。
 
 ### Task M1.8: エントリ統合 + 起動時間検証 (サイズ: S)
 
@@ -655,7 +659,7 @@ export type ShotInput = { ballIndex: number, vx: number, vy: number };
 
 | # | リスク | Phase 0 | Phase 1 | Phase 2 |
 |---|---|---|---|---|
-| **R1** | 引力定数 G の調整難度 | M0.1 プロトでスライダ調整 + M0.3 で支持率測定 | M1.1.F に G モード単体テスト / 破綻ロガー組込 | M2.3 強引力評価で再検証 |
+| **R1** | 引力定数 G の調整難度 | M0.1 プロトでスライダ調整 + M0.3 で支持率測定 | M1.1.F に G モード単体テスト / 破綻ロガー組込。**M1.2 検証で G=1e-3 設定では引力周回軌道が継続し runUntilRest がほぼ毎ターン timeoutMs=4000 で打ち切り**となることを確認 → 「ターン → 完全静止 → 次ターン」想定が成立しない可能性。M1.5 ターン制御 / M0.3 ゲートで支持率と合わせて再評価し、G の既定値見直しまたは打ち切り時 UX (フェードアウト等) を検討する | M2.3 強引力評価で再検証 |
 | **R2** | 物理収束時間が長引く | M0.1 で実測 (1 ターン最大時間ログ) | M1.1.G で「1 ターン 4 秒強制停止」実装 + テスト | 20 球連戦で実測 |
 | **R3** | タッチ誤操作率 | M0.5 で 10 名計測 (基準 ≤30%) | M1.3 で計測ロガー恒常実装 | プレイテスト時に追測定 |
 | **R4** | 既存ジャンルとの差別化 | M0.3 支持率で「引力ありの面白さ」検証 = 差別化軸の妥当性確認 | — (M0 結果に基づき継続) | M2.5 アンケートで「他ジャンルとの違い」設問 |
