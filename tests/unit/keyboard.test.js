@@ -3,7 +3,7 @@
 // の状態遷移と velocity 計算を DOM 非依存で検証する。
 
 import { test, assertEqual, assertClose } from '../assert.js';
-import { createKeyboardController } from '../../src/input/keyboard.js';
+import { createKeyboardController, createKeyboardFsm } from '../../src/input/keyboard.js';
 
 const TOL = 1e-9;
 
@@ -205,4 +205,81 @@ test('keyboard: 無関係なキー (例 "a") は no-op', () => {
     assertEqual(cancelled, 0, 'no cancel');
     assertEqual(ctrl.getState(), 'placing', 'still placing');
     assertEqual(ctrl.getSnapshot().placementIndex, 0, 'no index change');
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// v2: createKeyboardFsm (placing+aiming 統合 dispatch FSM)
+// ─────────────────────────────────────────────────────────────────────────────
+
+test('keyboard-fsm: placing 初期 mode、ArrowLeft/Right で launchX ±0.01', () => {
+    const events = [];
+    const fsm = createKeyboardFsm({
+        onPlace: (x) => events.push(x),
+        initialLaunchX: 0.25,
+    });
+    assertEqual(fsm.getMode(), 'placing', '初期 mode');
+    fsm.dispatch({ type: 'keydown', key: 'ArrowRight' });
+    fsm.dispatch({ type: 'keydown', key: 'ArrowLeft' });
+    assertEqual(events.length, 2, 'onPlace 2 回');
+    assertClose(events[0], 0.26, TOL, 'right +0.01');
+    assertClose(events[1], 0.25, TOL, 'left -0.01');
+});
+
+test('keyboard-fsm: Shift+Arrow で launchX ±0.05', () => {
+    const events = [];
+    const fsm = createKeyboardFsm({
+        onPlace: (x) => events.push(x),
+        initialLaunchX: 0.25,
+    });
+    fsm.dispatch({ type: 'keydown', key: 'ArrowRight', shiftKey: true });
+    fsm.dispatch({ type: 'keydown', key: 'ArrowLeft', shiftKey: true });
+    assertClose(events[0], 0.30, TOL, 'shift+right +0.05');
+    assertClose(events[1], 0.25, TOL, 'shift+left -0.05');
+});
+
+test('keyboard-fsm: launchX は [0.05, 0.45] にクランプ', () => {
+    const events = [];
+    const fsm = createKeyboardFsm({
+        onPlace: (x) => events.push(x),
+        initialLaunchX: 0.06,
+    });
+    fsm.dispatch({ type: 'keydown', key: 'ArrowLeft' }); // 0.05
+    fsm.dispatch({ type: 'keydown', key: 'ArrowLeft' }); // clamp
+    assertClose(events[0], 0.05, TOL, 'min clamp 1');
+    assertClose(events[1], 0.05, TOL, 'min clamp 2');
+});
+
+test('keyboard-fsm: T キー (大文字小文字とも) で onTogglePreview', () => {
+    let toggled = 0;
+    const fsm = createKeyboardFsm({
+        onPlace: () => {},
+        onTogglePreview: () => { toggled++; },
+    });
+    fsm.dispatch({ type: 'keydown', key: 't' });
+    fsm.dispatch({ type: 'keydown', key: 'T' });
+    assertEqual(toggled, 2, '2 回呼ばれる');
+    assertEqual(fsm.getMode(), 'placing', 'モードは不変');
+});
+
+test('keyboard-fsm: placing→aiming→aiming-power→done で onShoot に launchX/vx/vy', () => {
+    let shot = null;
+    const fsm = createKeyboardFsm({
+        onPlace: () => {},
+        onShoot: (s) => { shot = s; },
+        initialLaunchX: 0.30,
+        directionCount: 24,
+        powerLevels: 10,
+        maxPowerVelocity: 1.2,
+    });
+    fsm.dispatch({ type: 'keydown', key: 'Enter' }); // placing → aiming
+    assertEqual(fsm.getMode(), 'aiming', 'aiming');
+    fsm.dispatch({ type: 'keydown', key: 'Enter' }); // aiming → aiming-power
+    assertEqual(fsm.getMode(), 'aiming-power', 'aiming-power');
+    for (let i = 0; i < 5; i++) fsm.dispatch({ type: 'keydown', key: 'ArrowUp' });
+    fsm.dispatch({ type: 'keydown', key: 'Enter' });
+    assertEqual(fsm.getMode(), 'done', 'done');
+    if (!shot) throw new Error('onShoot 未発火');
+    assertClose(shot.launchX, 0.30, TOL, 'launchX 保持');
+    assertClose(shot.vx, 0, 1e-12, 'vx ≈ 0');
+    assertClose(shot.vy, -0.6, 1e-9, 'vy = -0.6');
 });

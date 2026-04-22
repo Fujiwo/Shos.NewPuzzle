@@ -37,11 +37,22 @@ const DEFAULT_POWER_LEVELS = 10;
 const DEFAULT_MAX_POWER_VELOCITY = 1.2;
 const DEFAULT_INITIAL_DIRECTION_RADIANS = -Math.PI / 2;
 
+// v2: createKeyboardFsm 用 launch X スライダ定数 (pointer.js と対)
+const LAUNCH_X_MIN = 0.05;
+const LAUNCH_X_MAX = 0.45;
+const LAUNCH_X_STEP = 0.01;
+const LAUNCH_X_STEP_LARGE = 0.05;
+const POWER_STEP = 1;
+
 // プレイスメント X (steps==1 のときは矩形中央)
 function computePlacementPoint(index, ownSideRect, placementSteps) {
     const { x0, y0, x1, y1 } = ownSideRect;
     const t = placementSteps > 1 ? index / (placementSteps - 1) : 0.5;
     return { x: x0 + t * (x1 - x0), y: (y0 + y1) / 2 };
+}
+
+function clampLaunchX(x) {
+    return Math.max(LAUNCH_X_MIN, Math.min(LAUNCH_X_MAX, x));
 }
 
 // directionIndex → ラジアン
@@ -238,5 +249,157 @@ export function attachKeyboardInput(target, controllerOptions) {
         detach() {
             target.removeEventListener('keydown', onKeyDown);
         },
+    };
+}
+
+/**
+ * v2 キーボード placing+aiming 統合 FSM (dispatch スタイル)。
+ * pointer.js の createPointerFsm と対になる API。
+ *
+ * 状態遷移:
+ *   placing       -- ArrowLeft/Right        → placing       (launchX ±0.01, onPlace; Shift で ±0.05)
+ *   placing       -- Enter                  → aiming        (directionIndex/powerLevel リセット)
+ *   aiming        -- ArrowLeft/Right        → aiming        (directionIndex 環状, onAim)
+ *   aiming        -- Enter                  → aiming-power  (powerLevel=0)
+ *   aiming        -- Escape                 → placing       (launchX 保持)
+ *   aiming-power  -- ArrowUp / Space        → aiming-power  (powerLevel +1, 上限頭打ち)
+ *   aiming-power  -- ArrowDown              → aiming-power  (powerLevel -1, 下限 1)
+ *   aiming-power  -- Enter (powerLevel>=1)  → done           (onShoot)
+ *   aiming-power  -- Escape                 → aiming        (powerLevel リセット)
+ *   グローバル: T / t                       → onTogglePreview (状態不変)
+ *
+ * @param {Object} options
+ * @param {(launchX:number) => void} [options.onPlace]
+ * @param {(info:{directionIndex:number, directionRadians:number, powerLevel:number, vx:number, vy:number}) => void} [options.onAim]
+ * @param {(shot:{launchX:number, vx:number, vy:number}) => void} [options.onShoot]
+ * @param {() => void} [options.onTogglePreview]
+ * @param {number} [options.initialLaunchX=0.25]
+ * @param {number} [options.directionCount=24]
+ * @param {number} [options.powerLevels=10]
+ * @param {number} [options.maxPowerVelocity=1.2]
+ * @param {number} [options.initialDirectionRadians=-π/2]
+ * @returns {{ dispatch:(ev:any)=>void, getMode:()=>string, getLaunchX:()=>number, getSnapshot:()=>object }}
+ */
+export function createKeyboardFsm(options = {}) {
+    const onPlace = options.onPlace;
+    const onAim = options.onAim;
+    const onShoot = options.onShoot;
+    const onTogglePreview = options.onTogglePreview;
+    const directionCount = options.directionCount ?? DEFAULT_DIRECTION_COUNT;
+    const powerLevels = options.powerLevels ?? DEFAULT_POWER_LEVELS;
+    const maxPowerVelocity = options.maxPowerVelocity ?? DEFAULT_MAX_POWER_VELOCITY;
+    const initialDirectionRadians = options.initialDirectionRadians ?? DEFAULT_INITIAL_DIRECTION_RADIANS;
+
+    let mode = 'placing';
+    let launchX = options.initialLaunchX ?? 0.25;
+    let directionIndex = 0;
+    let powerLevel = 0;
+
+    function indexToRadiansLocal(i) {
+        return initialDirectionRadians + (i * 2 * Math.PI) / directionCount;
+    }
+
+    function computeAimVelocity() {
+        const magnitude = (maxPowerVelocity * powerLevel) / powerLevels;
+        const r = indexToRadiansLocal(directionIndex);
+        return { vx: magnitude * Math.cos(r), vy: magnitude * Math.sin(r) };
+    }
+
+    function notifyAim() {
+        if (!onAim) return;
+        const { vx, vy } = computeAimVelocity();
+        onAim({
+            directionIndex,
+            directionRadians: indexToRadiansLocal(directionIndex),
+            powerLevel,
+            vx,
+            vy,
+        });
+    }
+
+    function dispatch(ev) {
+        if (!ev || ev.type !== 'keydown') return;
+        // グローバル: T トグル (状態不変)
+        if (ev.key === 't' || ev.key === 'T') {
+            if (onTogglePreview) onTogglePreview();
+            return;
+        }
+
+        if (mode === 'placing') {
+            const step = ev.shiftKey ? LAUNCH_X_STEP_LARGE : LAUNCH_X_STEP;
+            switch (ev.key) {
+                case 'ArrowLeft':
+                    launchX = clampLaunchX(launchX - step);
+                    if (onPlace) onPlace(launchX);
+                    return;
+                case 'ArrowRight':
+                    launchX = clampLaunchX(launchX + step);
+                    if (onPlace) onPlace(launchX);
+                    return;
+                case 'Enter':
+                    directionIndex = 0;
+                    powerLevel = 0;
+                    mode = 'aiming';
+                    return;
+                default:
+                    return;
+            }
+        } else if (mode === 'aiming') {
+            switch (ev.key) {
+                case 'ArrowLeft':
+                    directionIndex = (directionIndex - 1 + directionCount) % directionCount;
+                    notifyAim();
+                    return;
+                case 'ArrowRight':
+                    directionIndex = (directionIndex + 1) % directionCount;
+                    notifyAim();
+                    return;
+                case 'Enter':
+                    powerLevel = 0;
+                    mode = 'aiming-power';
+                    notifyAim();
+                    return;
+                case 'Escape':
+                    directionIndex = 0;
+                    powerLevel = 0;
+                    mode = 'placing';
+                    return;
+                default:
+                    return;
+            }
+        } else if (mode === 'aiming-power') {
+            switch (ev.key) {
+                case ' ':
+                case 'ArrowUp':
+                    powerLevel = Math.min(powerLevels, powerLevel + POWER_STEP);
+                    notifyAim();
+                    return;
+                case 'ArrowDown':
+                    powerLevel = Math.max(1, powerLevel - POWER_STEP);
+                    notifyAim();
+                    return;
+                case 'Enter': {
+                    if (powerLevel < 1) return;
+                    const v = computeAimVelocity();
+                    if (onShoot) onShoot({ launchX, vx: v.vx, vy: v.vy });
+                    mode = 'done';
+                    return;
+                }
+                case 'Escape':
+                    powerLevel = 0;
+                    mode = 'aiming';
+                    return;
+                default:
+                    return;
+            }
+        }
+        // mode === 'done' は no-op
+    }
+
+    return {
+        dispatch,
+        getMode: () => mode,
+        getLaunchX: () => launchX,
+        getSnapshot: () => ({ mode, launchX, directionIndex, powerLevel }),
     };
 }
