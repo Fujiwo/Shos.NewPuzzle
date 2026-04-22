@@ -20,10 +20,12 @@ import {
     renderHudV2,
     getMuteButtonLabel,
     renderSettingsPanel,
+    renderShareControls,
 } from './render/ui.js';
 import { createEffectManager } from './render/effects.js';
 import { createSfxController, createWebAudioSfx } from './audio/sfx.js';
 import { loadSettings, saveSettings } from './game/settings.js';
+import { encodeShareUrl, decodeShareUrl } from './game/replay.js';
 
 // G7 計測: モジュールロード時刻を起点とする
 performance.mark('app-start');
@@ -80,10 +82,11 @@ function makePointerToWorld(canvas, viewport, getBounds) {
  *   statusEl: HTMLElement,
  *   restartButton?: HTMLButtonElement,
  *   settingsRoot?: HTMLElement,
+ *   shareRoot?: HTMLElement,
  * }} deps
  */
 export function bootstrap(deps) {
-    const { canvas, muteButton, modeSelect, statusEl, restartButton, settingsRoot } = deps;
+    const { canvas, muteButton, modeSelect, statusEl, restartButton, settingsRoot, shareRoot } = deps;
     const ctx = canvas.getContext('2d');
     const viewport = fitViewport({ width: canvas.width, height: canvas.height });
 
@@ -94,6 +97,14 @@ export function bootstrap(deps) {
 
     // 設定 (永続化)
     let settings = loadSettings();
+
+    // M2v2.1: ?r= で共有された結果を解釈 (state には影響しない / 表示のみ)
+    let importedResult = null;
+    try {
+        const params = new URLSearchParams(globalThis.location?.search ?? '');
+        const r = params.get('r');
+        if (r) importedResult = decodeShareUrl(r);
+    } catch { /* SSR 等で location 未定義なら無視 */ }
 
     // 初期 state (v2)
     let state = createInitialState({
@@ -215,6 +226,66 @@ export function bootstrap(deps) {
         });
     }
 
+    // --- 結果共有 UI (M2v2.1) ---
+    // state.status === 'ended' で encode して shareUrl を生成し、コピーボタンを描画。
+    // importedResult があれば「共有された結果」バナーを常時表示。
+    function refreshShareControls() {
+        if (!shareRoot) return;
+        let shareUrl = null;
+        if (state.status === 'ended') {
+            const totals = [0, 0];
+            for (const es of state.endScores ?? []) {
+                if (es.side !== null) totals[es.side] += es.points;
+            }
+            const encoded = encodeShareUrl({
+                mode: state.mode,
+                hammerSide: state.hammerSide ?? 0,
+                endScores: totals,
+            });
+            const loc = globalThis.location;
+            const base =
+                loc && loc.origin && loc.origin !== 'null'
+                    ? `${loc.origin}${loc.pathname}`
+                    : '';
+            shareUrl = base ? `${base}?r=${encoded}` : `?r=${encoded}`;
+        }
+        renderShareControls(shareRoot, {
+            shareUrl,
+            onCopy: copyToClipboard,
+            importedResult,
+        });
+    }
+
+    // navigator.clipboard が無い (古い Safari / file://) 場合の textarea fallback
+    function copyToClipboard(text) {
+        const nav = globalThis.navigator;
+        if (nav?.clipboard?.writeText) {
+            nav.clipboard.writeText(text).then(
+                () => setStatusText('共有 URL をコピーしました'),
+                () => fallbackCopy(text),
+            );
+            return;
+        }
+        fallbackCopy(text);
+    }
+    function fallbackCopy(text) {
+        try {
+            const doc = globalThis.document;
+            const ta = doc.createElement('textarea');
+            ta.value = text;
+            ta.setAttribute('readonly', '');
+            ta.style.position = 'fixed';
+            ta.style.opacity = '0';
+            doc.body.appendChild(ta);
+            ta.select();
+            doc.execCommand('copy');
+            doc.body.removeChild(ta);
+            setStatusText('共有 URL をコピーしました');
+        } catch {
+            setStatusText('コピーに失敗しました');
+        }
+    }
+
     // --- リスタート ---
     function restart() {
         state = createInitialState({
@@ -227,6 +298,7 @@ export function bootstrap(deps) {
         performance.clearMarks('first-shot');
         rebindInput();
         setStatusText('');
+        refreshShareControls();
     }
 
     // --- ショット静止後の確定処理 ---
@@ -282,6 +354,7 @@ export function bootstrap(deps) {
                 const result = evaluateWinner(state);
                 const winnerText = result.winner === null ? '引き分け' : `P${result.winner} の勝ち`;
                 setStatusText(`試合終了: ${winnerText} (合計 ${result.totals[0]} - ${result.totals[1]})`);
+                refreshShareControls();
             } else {
                 setStatusText(`エンド ${state.endIndex} 終了 → 次のエンドへ`);
             }
@@ -302,6 +375,7 @@ export function bootstrap(deps) {
 
     refreshSettingsPanel();
     rebindInput();
+    refreshShareControls();
 
     // ----- rAF ループ -----
     let rafId = 0;

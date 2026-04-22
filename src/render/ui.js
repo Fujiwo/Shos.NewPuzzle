@@ -181,6 +181,66 @@ export function renderSettingsPanel(container, settings, onChange) {
 }
 
 /**
+ * 結果共有 UI (M2v2.1) を container に DOM 構築する。
+ * - shareUrl が指定されたら「結果共有」ブロック (ボタン + 短縮 URL 表示) を描画
+ * - importedResult が指定されたら「読み込んだ結果」ブロック (P0/P1 totals) を描画
+ * - 両方 null の場合は container を空にする
+ *
+ * 副作用: container の子要素を全削除してから DOM を追加。
+ * @param {HTMLElement|null} container
+ * @param {{
+ *   shareUrl: string|null,
+ *   onCopy?: (url:string) => void,
+ *   importedResult: {mode:'2end'|'1end', hammerSide:0|1, endScores:number[]}|null,
+ * }} opts
+ * @returns {HTMLElement|null}
+ */
+export function renderShareControls(container, opts) {
+    if (!container) return null;
+    while (container.firstChild) container.removeChild(container.firstChild);
+    const { shareUrl, onCopy, importedResult } = opts ?? {};
+    if (!shareUrl && !importedResult) return null;
+
+    const doc = container.ownerDocument;
+    const panel = doc.createElement('div');
+    panel.className = 'share-panel';
+
+    if (importedResult) {
+        const banner = doc.createElement('div');
+        banner.className = 'share-imported';
+        const totals = importedResult.endScores;
+        const p0 = totals[0] ?? 0;
+        const p1 = totals[1] ?? 0;
+        const ham = importedResult.hammerSide === 0 ? 'P0' : 'P1';
+        banner.textContent = `共有された結果: P0 ${p0} - ${p1} P1 (${importedResult.mode} / ハンマー ${ham})`;
+        panel.appendChild(banner);
+    }
+
+    if (shareUrl) {
+        const row = doc.createElement('div');
+        row.className = 'share-row';
+
+        const button = doc.createElement('button');
+        button.type = 'button';
+        button.className = 'share-copy';
+        button.textContent = '結果共有 URL コピー';
+        button.addEventListener('click', () => {
+            if (typeof onCopy === 'function') onCopy(shareUrl);
+        });
+        row.appendChild(button);
+
+        const urlSpan = doc.createElement('span');
+        urlSpan.className = 'share-url';
+        urlSpan.textContent = shareUrl;
+        row.appendChild(urlSpan);
+
+        panel.appendChild(row);
+    }
+    container.appendChild(panel);
+    return panel;
+}
+
+/**
  * v2 スコアボード文字列。例:
  *   in-progress: 'エンド 1/2  P0:0 P1:1  ハンマー: P0  投目 3/8'
  *   ended:       '試合終了  P0:2 P1:3'
