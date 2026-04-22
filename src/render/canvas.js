@@ -1,6 +1,8 @@
 // Canvas 2D レンダラ: world / state / effects → ピクセル描画。
 // 副作用関数 render() はテスト不能だが、純粋ヘルパは export してテスト可能にする。
 
+import { computeTrajectory, drawTrajectory } from './preview.js';
+
 // 確定配色 (M0.4 / Ideas §5.2)
 export const COLORS = Object.freeze({
     table: '#1A2E1A',     // 背景 (ダークグリーン)
@@ -53,8 +55,10 @@ export function fitViewport(v) {
  * @param {object} effects - createEffectManager() の戻り値
  * @param {{width:number, height:number, scale:number}} viewport
  * @param {number} nowMs
+ * @param {{enabled:boolean, launchX:number, vx:number, vy:number} | null} [aim]
+ *   - aim != null && aim.enabled === true のときのみ軌道予測線を描画
  */
-export function render(ctx, gameState, effects, viewport, nowMs) {
+export function render(ctx, gameState, effects, viewport, nowMs, aim) {
     const { width, height, scale } = viewport;
     const offsetX = (width - scale) / 2;
     const offsetY = (height - scale) / 2;
@@ -118,6 +122,17 @@ export function render(ctx, gameState, effects, viewport, nowMs) {
         ctx.fillText(pop.text, p.x, p.y - pop.dy);
     }
     ctx.globalAlpha = 1;
+
+    // 軌道予測線 (aiming 中のみ)
+    if (aim && aim.enabled && gameState.world?.params) {
+        const path = computeTrajectory(
+            { x: aim.launchX, y: 1.45 },
+            { vx: aim.vx, vy: aim.vy },
+            gameState.world.params,
+            gameState.world.bounds
+        );
+        drawTrajectory(ctx, path, (p) => worldToScreen(p, viewport));
+    }
 
     ctx.restore();
 }
