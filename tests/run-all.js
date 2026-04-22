@@ -16,6 +16,7 @@ import './unit/loop.test.js';
 import './unit/house.test.js';
 import './unit/fgz.test.js';
 import './unit/preview.test.js';
+import './unit/settings.test.js';
 
 const summaryEl = document.getElementById('summary');
 const resultsEl = document.getElementById('results');
