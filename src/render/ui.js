@@ -2,6 +2,7 @@
 // 純粋ヘルパ (formatRemainingSeconds / formatScoreboard / TUTORIAL_TEXT) は export してテスト可能。
 
 import { COLORS } from './canvas.js';
+import { scoreEnd } from '../game/rules.js';
 
 /**
  * 起動時に表示するチュートリアル文言 (1 行、100 文字以内 = G2 制約)。
@@ -100,4 +101,81 @@ export function renderHud(ctx, gameState, viewport, nowMs) {
  */
 export function getMuteButtonLabel(muted) {
     return muted ? '🔇 音 OFF' : '🔊 音 ON';
+}
+
+// --- v2 (カーリング型) 用ヘルパ ---
+
+/**
+ * v2 用チュートリアル文言 (1 行、100 文字以内 = G2 制約)。
+ */
+export const TUTORIAL_TEXT_V2 = '指で引いて離す。線を読んで的に近づけて勝つ。';
+
+/**
+ * パワーゲージ表示用の比率 [0, 1]。pullDist / maxPullDist をクランプ。
+ * @param {number} pullDist - 現在のドラッグ距離 (世界座標単位)
+ * @param {number} maxPullDist - クランプ上限
+ * @returns {number} 0..1
+ */
+export function computePowerLevel(pullDist, maxPullDist) {
+    if (maxPullDist <= 0) return 0;
+    return Math.max(0, Math.min(1, pullDist / maxPullDist));
+}
+
+/**
+ * 現在の盤面で「いまエンドが終わったら誰が何点取るか」を返す。
+ * scoreEnd の薄いラッパ (UI からの直接呼出をテスト可能にする)。
+ * @param {Array<{x:number,y:number,owner:0|1}>} balls
+ * @returns {{side:0|1|null, points:number}}
+ */
+export function computeScorePreview(balls) {
+    return scoreEnd(balls);
+}
+
+/**
+ * ハンマー (後攻優位) を持つ side のラベル文字列を返す。
+ * @param {0|1|null} side
+ * @returns {string} 'P0' | 'P1' | ''
+ */
+export function formatHammerLabel(side) {
+    if (side === 0) return 'P0';
+    if (side === 1) return 'P1';
+    return '';
+}
+
+/**
+ * 設定パネル (チェックボックス) を container に DOM 構築する。
+ * 既に panel が存在する場合は中身を再構築する (容易な再描画)。
+ *
+ * 副作用: container の子要素を全削除してから panel を追加。
+ * @param {HTMLElement} container
+ * @param {{aimPreview:boolean}} settings
+ * @param {(patch:{aimPreview?:boolean}) => void} onChange
+ * @returns {HTMLElement|null} 構築した panel ルート要素 (container null なら null)
+ */
+export function renderSettingsPanel(container, settings, onChange) {
+    if (!container) return null;
+    while (container.firstChild) container.removeChild(container.firstChild);
+
+    const doc = container.ownerDocument;
+    const panel = doc.createElement('div');
+    panel.className = 'settings-panel';
+
+    const label = doc.createElement('label');
+    label.className = 'settings-row';
+
+    const checkbox = doc.createElement('input');
+    checkbox.type = 'checkbox';
+    checkbox.checked = !!settings.aimPreview;
+    checkbox.addEventListener('change', () => {
+        onChange({ aimPreview: checkbox.checked });
+    });
+
+    const span = doc.createElement('span');
+    span.textContent = '軌道予測線を表示 (T)';
+
+    label.appendChild(checkbox);
+    label.appendChild(span);
+    panel.appendChild(label);
+    container.appendChild(panel);
+    return panel;
 }
