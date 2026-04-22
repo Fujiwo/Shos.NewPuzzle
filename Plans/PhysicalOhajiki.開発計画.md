@@ -548,12 +548,14 @@ export type ShotInput = { ballIndex: number, vx: number, vy: number };
 
 **Files:**
 - Create: `src/audio/sfx.js`
-- Create: `assets/sounds/click.wav` (100ms 程度の「カチッ」音)
+- ~~Create: `assets/sounds/click.wav`~~ → **不採用 (M1.7 実装時に変更)**: 依存ゼロ志向 / バイナリコミット回避のため `OscillatorNode` + `GainNode` で `click` (1200Hz triangle 50ms) / `pop` (600Hz square 120ms) / `turn` (440Hz sine 150ms) を合成。`getSoundParams(eventName)` で一元管理しコードレビューで音色調整可能。
 
-- [ ] **Step 1: WebAudio API でロード/再生実装**
+- [ ] **Step 1: WebAudio API で合成・再生実装** (純粋 controller + browser adapter の二層)
 - [ ] **Step 2: 弾き出し時に再生フック追加**
 - [ ] **Step 3: ミュート切替 UI 追加**
 - [ ] **Step 4: コミット** — `feat(audio): collision and knock-out sfx`
+
+> **M1.8 への引き継ぎ事項 (M1.7 で発覚)**: 球-球衝突音 (`click`) は `engine.step()` 内部で発生するため main.js 側 polling では拾えない。**`step(state, dt, { onCollision })` にコールバック引数を 1 個追加し、`collision.js` の resolve 呼出箇所 1 ヶ所で発火させる方針** を M1.8 で採用予定。`pop` (場外) と `turn` (ターン番号差分) は main.js 側の状態 diff で検出可能。
 
 ### Task M1.8: エントリ統合 + 起動時間検証 (サイズ: S)
 
