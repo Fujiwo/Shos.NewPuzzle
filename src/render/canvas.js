@@ -14,18 +14,22 @@ export const COLORS = Object.freeze({
 });
 
 /**
- * 世界座標 (0..1) を画面ピクセル座標に変換する純粋関数。
- * scale は world 1.0 単位を pixel に換算する係数。viewport 内中央寄せ。
+ * 世界座標を world.bounds 基準で画面ピクセル座標に変換する純粋関数。
+ * bounds 全体が viewport 内に収まるよう scale を計算し、中央寄せする。
  * @param {{x:number, y:number}} point
- * @param {{width:number, height:number, scale:number}} viewport
+ * @param {{width:number, height:number, scale?:number, bounds?:{x:number, y:number, w:number, h:number}}} viewport
  * @returns {{x:number, y:number}}
  */
 export function worldToScreen(point, viewport) {
-    const offsetX = (viewport.width - viewport.scale) / 2;
-    const offsetY = (viewport.height - viewport.scale) / 2;
+    const bounds = viewport.bounds ?? { x: 0, y: 0, w: 1, h: 1 };
+    const scale = Math.min(viewport.width / bounds.w, viewport.height / bounds.h);
+    const contentWidth = bounds.w * scale;
+    const contentHeight = bounds.h * scale;
+    const offsetX = (viewport.width - contentWidth) / 2;
+    const offsetY = (viewport.height - contentHeight) / 2;
     return {
-        x: point.x * viewport.scale + offsetX,
-        y: point.y * viewport.scale + offsetY,
+        x: (point.x - bounds.x) * scale + offsetX,
+        y: (point.y - bounds.y) * scale + offsetY,
     };
 }
 
@@ -41,11 +45,17 @@ export function getBallStyle(ball) {
 }
 
 /**
- * viewport から world スケールを推定するヘルパ。
+ * viewport と world.bounds から描画用スケールを推定するヘルパ。
  * @param {{width:number, height:number}} v
+ * @param {{x:number, y:number, w:number, h:number}} [bounds]
  */
-export function fitViewport(v) {
-    return { width: v.width, height: v.height, scale: Math.min(v.width, v.height) };
+export function fitViewport(v, bounds = { x: 0, y: 0, w: 1, h: 1 }) {
+    return {
+        width: v.width,
+        height: v.height,
+        scale: Math.min(v.width / bounds.w, v.height / bounds.h),
+        bounds,
+    };
 }
 
 /**
@@ -53,13 +63,15 @@ export function fitViewport(v) {
  * @param {CanvasRenderingContext2D} ctx
  * @param {object} gameState - { world, ... }
  * @param {object} effects - createEffectManager() の戻り値
- * @param {{width:number, height:number, scale:number}} viewport
+ * @param {{width:number, height:number, scale:number, bounds?:{x:number, y:number, w:number, h:number}}} viewport
  * @param {number} nowMs
  * @param {{enabled:boolean, launchX:number, vx:number, vy:number} | null} [aim]
  *   - aim != null && aim.enabled === true のときのみ軌道予測線を描画
  */
 export function render(ctx, gameState, effects, viewport, nowMs, aim) {
-    const { width, height, scale } = viewport;
+    const worldBounds = gameState.world?.bounds ?? viewport.bounds ?? { x: 0, y: 0, w: 1, h: 1 };
+    const resolvedViewport = fitViewport(viewport, worldBounds);
+    const { width, height, scale } = resolvedViewport;
     const offsetX = (width - scale) / 2;
     const offsetY = (height - scale) / 2;
     const shake = effects.getShakeOffset(nowMs);
